@@ -8,11 +8,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  obtener, enParalelo, hash, slug, normalizar, textoPlano, limpiarTitulo, urlCanonica, dominio, fechaISO, leerJson, escribirJson,
+  obtener, enParalelo, hash, slug, normalizar, decodificar, textoPlano, limpiarTitulo, urlCanonica, dominio, fechaISO, leerJson, escribirJson,
 } from './lib/util.mjs';
 import {
   leerFeed, urlFeedYoutube, canalDe, listarPlaylist, listasDeCanal, playlistDeSubidas, idYoutube, miniaturaYoutube,
-  oembedYoutube, buscarYoutube, detallesYoutube, leerMetaPagina,
+  oembedYoutube, buscarYoutube, detallesYoutube, leerMetaPagina, idVimeo, videosVimeo, videosDailymotion, videosArchive,
 } from './lib/lectores.mjs';
 import { crearClasificador } from './lib/clasificador.mjs';
 import { crearEtiquetador, extraerHashtags, idHashtag } from './lib/hashtags.mjs';
@@ -36,9 +36,13 @@ export function idDeEnlace(valor) {
 
 function desdeEntrada(e, f) {
   const hashtagsFuente = hashtagsDe(e.titulo, e.html);
+  const vimeo = idVimeo(e.url);
   return {
-    id: e.ytId ? `yt-${e.ytId}` : `a-${hash(urlCanonica(e.url))}`,
-    tipo: e.ytId ? 'video' : esPdf(e.url) ? 'documento' : f.tipoContenido || 'articulo',
+    id: e.ytId ? `yt-${e.ytId}` : vimeo ? `vm-${vimeo}` : `a-${hash(urlCanonica(e.url))}`,
+    tipo: e.ytId || vimeo ? 'video' : esPdf(e.url) ? 'documento' : f.tipoContenido || 'articulo',
+    // Dirección para ver el video dentro del portal (YouTube usa su propio reproductor)
+    embed: vimeo ? (e.reproductor || `https://player.vimeo.com/video/${vimeo}`) : undefined,
+    duracion: e.duracion,
     titulo: textoPlano(e.titulo, 200),
     url: e.url,
     miniatura: e.imagen || null,
@@ -52,6 +56,39 @@ function desdeEntrada(e, f) {
     etiquetasFuente: e.etiquetas?.length ? e.etiquetas.slice(0, 12) : undefined,
     hashtagsFuente: hashtagsFuente.length ? hashtagsFuente : undefined,
     vistas: e.vistas,
+    origen: 'fuente',
+  };
+}
+
+// Videos de Vimeo, Dailymotion e Internet Archive (vienen de sus APIs públicas, no de un RSS).
+// Dailymotion ya no deja insertar videos con su reproductor genérico (responde 403): hace falta un Player ID
+// propio, que se crea gratis en Dailymotion Studio y se pone en opciones.reproductorDailymotion. Sin él, sus
+// videos se abren en Dailymotion.
+let reproductorDailymotion = null;
+const EMBEDS = {
+  vimeo: (id) => `https://player.vimeo.com/video/${id}`,
+  dailymotion: (id) => (reproductorDailymotion ? `https://geo.dailymotion.com/player/${reproductorDailymotion}.html?video=${id}` : undefined),
+  archive: (id) => `https://archive.org/embed/${id}`,
+};
+function desdeVideo(v, f, plataforma) {
+  const prefijo = { vimeo: 'vm', dailymotion: 'dm', archive: 'ia' }[plataforma];
+  const hashtagsFuente = hashtagsDe(v.titulo, v.descripcion);
+  return {
+    id: `${prefijo}-${v.id}`,
+    tipo: 'video',
+    titulo: textoPlano(v.titulo, 200),
+    url: v.url,
+    miniatura: v.imagen || null,
+    embed: EMBEDS[plataforma](v.id),
+    fuenteId: f.id,
+    fuente: f.busqueda && v.autor ? v.autor : f.nombre, // en búsquedas se muestra la cuenta que lo publicó
+    idioma: f.idioma || 'es',
+    fecha: fechaISO(v.fecha),
+    resumen: textoPlano(v.descripcion, 400),
+    etiquetasFuente: v.etiquetas?.length ? v.etiquetas.slice(0, 12) : undefined,
+    hashtagsFuente: hashtagsFuente.length ? hashtagsFuente : undefined,
+    vistas: v.vistas,
+    duracion: v.duracion,
     origen: 'fuente',
   };
 }
@@ -143,13 +180,14 @@ async function main() {
   ]);
   const cacheListas = await leerJson(RUTA_CACHE_LISTAS, {});
   const opc = { filtrarTodo: true, maxItems: 5000, maxPorFuente: 60, maxPorCanalConClave: 150, listasPorCanal: 10, diasCacheListas: 7, concurrencia: 6, buscarImagenEnPagina: true, ...cfgFuentes.opciones };
+  reproductorDailymotion = String(opc.reproductorDailymotion || '').trim() || null;
   const clasificador = crearClasificador(cfgCategorias);
   const etiquetador = crearEtiquetador(cfgHashtags);
   // --sin-red: solo reclasifica la biblioteca (rápido, sin internet), útil al editar la configuración.
   const sinRed = process.argv.includes('--sin-red');
   const claveYT = sinRed ? null : process.env.YT_API_KEY?.trim();
 
-  const fuentes = (cfgFuentes.fuentes ?? []).filter((f) => f.activa !== false).map((f) => ({ ...f, id: slug(f.nombre) }));
+  const fuentes = (cfgFuentes.fuentes ?? []).filter((f) => f.activa !== false).map((f) => ({ ...f, id: slug(f.nombre), nombre: decodificar(f.nombre) })); // el id sale del nombre tal como está escrito
   const fuentesPorId = new Map(fuentes.map((f) => [f.id, f]));
   for (const f of fuentes) {
     if (f.categoria && !clasificador.ids.has(f.categoria)) console.warn(`⚠ ${f.nombre}: el tema "${f.categoria}" no existe en categorias.json`);
@@ -221,6 +259,13 @@ async function main() {
     let leidos = 0;
     let listas = 0;
     try {
+      const lectorVideos = { vimeo: videosVimeo, dailymotion: videosDailymotion, archive: videosArchive }[f.tipo];
+      if (lectorVideos) {
+        const videos = await lectorVideos({ usuario: f.usuario, canal: f.canal, busqueda: f.busqueda, idioma: f.idiomaBusqueda, limite: f.max });
+        videos.filter((v) => v.titulo).forEach((v) => incorporar(desdeVideo(v, f, f.tipo)));
+        informe.push({ id: f.id, nombre: f.nombre, leidos: videos.length, listas: 0 });
+        return;
+      }
       const url = f.tipo === 'youtube' ? await urlFeedYoutube(f) : f.url;
       const entradas = leerFeed(await obtener(url)).filter((e) => e.url && e.titulo).slice(0, opc.maxPorFuente);
       entradas.forEach((e) => incorporar(desdeEntrada(e, f)));
@@ -358,9 +403,27 @@ async function main() {
     titulosVistos.add(clave);
     return true;
   });
+  // Si hay más que el tope, el cupo se reparte por igual entre fuentes (por turnos, lo más nuevo de cada una
+  // primero). Así un canal que sube mucho no deja afuera a las fuentes chicas ni a los videos más antiguos.
   const manualesPub = publicados.filter((i) => i.origen === 'manual');
-  publicados = [...manualesPub, ...publicados.filter((i) => i.origen !== 'manual').slice(0, Math.max(0, opc.maxItems - manualesPub.length))]
-    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const colas = new Map();
+  for (const i of publicados.filter((x) => x.origen !== 'manual')) {
+    if (!colas.has(i.fuenteId)) colas.set(i.fuenteId, []);
+    colas.get(i.fuenteId).push(i);
+  }
+  const elegidos = [];
+  const cupo = Math.max(0, opc.maxItems - manualesPub.length);
+  for (let turno = 0; elegidos.length < cupo; turno++) {
+    let quedan = false;
+    for (const cola of colas.values()) {
+      if (turno >= cola.length) continue;
+      quedan = true;
+      elegidos.push(cola[turno]);
+      if (elegidos.length >= cupo) break;
+    }
+    if (!quedan) break;
+  }
+  publicados = [...manualesPub, ...elegidos].sort((a, b) => b.fecha.localeCompare(a.fecha));
 
   // 5) Hashtags: curados por palabras clave + los originales de las fuentes que se repiten
   const etiquetas = new Map(publicados.map((i) => [i.id, etiquetador.etiquetar(i)]));
@@ -412,7 +475,11 @@ async function main() {
   }
 
   // 8) Guardar biblioteca (todo lo recolectado) y la salida de la web (solo lo publicado)
-  const recorteBiblioteca = [...porId.values()].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, opc.maxItems * 2);
+  // Lo publicado se guarda siempre (aunque sea antiguo); el resto, lo más nuevo hasta completar el tope.
+  const idsPublicados = new Set(publicados.map((i) => i.id));
+  const recorteBiblioteca = [...porId.values()]
+    .sort((a, b) => (idsPublicados.has(b.id) - idsPublicados.has(a.id)) || b.fecha.localeCompare(a.fecha))
+    .slice(0, opc.maxItems * 2);
   await fs.mkdir(path.dirname(RUTA_BIBLIOTECA), { recursive: true });
   await escribirJson(RUTA_BIBLIOTECA, { actualizado: ahora, total: recorteBiblioteca.length, items: recorteBiblioteca }, true);
   await escribirJson(RUTA_CACHE_LISTAS, cacheListas, true);
@@ -462,7 +529,7 @@ async function main() {
     ].map((f) => ({ ...f, total: porFuente.get(f.id) ?? 0 })).filter((f) => f.total),
     items: publicados.map((i) => ({
       id: i.id, tipo: i.tipo, titulo: limpiarTitulo(i.titulo), url: i.url, miniatura: i.miniatura || undefined,
-      ytId: i.ytId, short: i.short, fuente: i.fuente, fuenteId: i.fuenteId, idioma: i.idioma, pais: fuentesPorId.get(i.fuenteId)?.pais ?? undefined,
+      ytId: i.ytId, embed: i.id.startsWith('dm-') ? EMBEDS.dailymotion(i.id.slice(3)) : i.embed, short: i.short, fuente: decodificar(i.fuente), fuenteId: i.fuenteId, idioma: i.idioma, pais: fuentesPorId.get(i.fuenteId)?.pais ?? undefined,
       fecha: i.fecha, agregado: i.agregado, duracion: i.duracion, vistas: i.vistas,
       categorias: i.categorias, sectores: i.sectores.length ? i.sectores : undefined,
       hashtags: i.hashtags.length ? i.hashtags : undefined,

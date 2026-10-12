@@ -1,6 +1,6 @@
 # SST Hub — Portal de seguridad laboral
 
-Galería de miniaturas que reúne **6000 videos, artículos y guías** de seguridad y salud en el trabajo de **252 fuentes** (227 canales de YouTube y 25 blogs y revistas de Perú, Latinoamérica, España y el mundo), los **clasifica por tema, sector y hashtag** y, al hacer clic, **te lleva a la página original**. Además permite **armar listas para charlas** y verlas seguidas o compartirlas por WhatsApp. Funciona en computadora y como **app instalable en el celular**.
+Galería de miniaturas que reúne **8000 videos, artículos y guías** de seguridad y salud en el trabajo de **313 fuentes**: 225 canales de YouTube, 11 cuentas de Vimeo, 13 de Dailymotion, filmes de capacitación de Internet Archive y 61 blogs y revistas de Perú, Latinoamérica, España y el mundo. Los **clasifica por tema, sector y hashtag** y, al hacer clic, **los reproduce dentro del portal o te lleva a la página original**. Además permite **armar listas para charlas** y verlas seguidas o compartirlas por WhatsApp. Funciona en computadora y como **app instalable en el celular**.
 
 | Escritorio | Reproductor de listas | Celular |
 |---|---|---|
@@ -22,15 +22,17 @@ Galería de miniaturas que reúne **6000 videos, artículos y guías** de seguri
 - **Hashtags automáticos** (#ICAM, #IPERC, #PETAR, #LOTO, #ControlesCríticos, #SaludMental…) más los que usan las propias fuentes (#SST, #SeguridadMinera).
 - **Buscador preciso**: busca en título, descripción, hashtags y fuente. “IPERC” trae lo que menciona IPERC, no todo un tema; las siglas cortas (ATS, EPP, RCP, 5S) deben coincidir completas. Entiende sin tildes y en plural (“arneses” encuentra “arnés”). Si no hay coincidencias exactas, lo dice y ofrece el tema relacionado. Escribe `#` para buscar solo hashtags.
 - **Recomendados para tu país, como YouTube**: primero lo que más se ve en tu país (se detecta solo y se puede cambiar), luego lo popular y reciente del resto, sin repetir la misma fuente seguida. Al bajar con el scroll van apareciendo más.
-- Filtros por tipo (video, artículo, PDF), sector, idioma, fuente y orden (recomendados, recientes, **más vistos**…), en **cuadrícula o lista**.
+- **Resultados parejos entre fuentes**: en las búsquedas, los temas y los recomendados se toma por turnos lo mejor de cada fuente. Si “IPERC” encuentra 120 resultados de 42 fuentes, los primeros 42 son uno de cada fuente; recién después se repiten las que tienen más.
+- Filtros por tipo (video, artículo, PDF), sector, idioma, **plataforma** (YouTube, Vimeo, Dailymotion, Internet Archive, webs y blogs), fuente y orden (recomendados, recientes, **más vistos**…), en **cuadrícula o lista**.
 - **Vista previa animada** al pasar el mouse sobre un video, como en los sitios de videos.
 - Etiqueta **“Nuevo”** y aviso de “X recursos nuevos desde tu última visita”.
 
 **Ver videos sin salir del portal (como YouTube)**
-- Al tocar un video **se reproduce dentro de SST Hub** con su información y una columna **“A continuación”** de videos relacionados (mismo tema, primero los de tu país) que avanza sola. Siempre queda el botón para abrirlo en YouTube; con Ctrl+clic o la rueda del mouse se abre directo allá. En el menú lateral se puede elegir abrir los videos en YouTube.
-- **Mini reproductor:** si sigues navegando, el video continúa en una ventanita abajo a la derecha (en el celular, sobre la barra inferior) con pausa, siguiente, ampliar y cerrar.
+- Al tocar un video **se reproduce dentro de SST Hub** con su información y una columna **“A continuación”** de videos relacionados (mismo tema, primero los de tu país). Funciona con **YouTube, Vimeo e Internet Archive**, cada uno con su reproductor oficial; en YouTube además avanza solo al siguiente. Siempre queda el botón para abrirlo en su página; con Ctrl+clic o la rueda del mouse se abre directo allá. En el menú lateral se puede elegir abrir los videos en su página.
+- **Dailymotion** ya no deja insertar videos sin un *Player ID* propio: sin él, sus videos se abren en Dailymotion. Para verlos dentro del portal, crea un Player gratis en Dailymotion Studio (pestaña *Players*) y pon su ID en `config/fuentes.json` → `opciones.reproductorDailymotion`.
+- **Mini reproductor:** si sigues navegando, el video continúa en una ventanita chica (200 px, la mitad del tamaño anterior) abajo a la derecha (en el celular, sobre la barra inferior) con pausa (solo YouTube), siguiente y cerrar; tocando el título vuelves a la página del video.
 - Al volver atrás regresas al mismo punto del scroll.
-- Cada tarjeta muestra **de dónde viene**: YouTube, YouTube Shorts, Vimeo… o el dominio de la web del artículo.
+- Cada tarjeta muestra **de dónde viene**: YouTube, YouTube Shorts, Vimeo, Dailymotion, Internet Archive… o el dominio de la web del artículo.
 
 **Filtrar por hashtags**: sobre los resultados aparece una barra con los hashtags más frecuentes y su cantidad; cada uno que tocas afina más (por ejemplo #Incendios + #Extintores).
 
@@ -54,18 +56,22 @@ Galería de miniaturas que reúne **6000 videos, artículos y guías** de seguri
 ```
  FUENTES                       RECOLECTOR (npm run recolectar)                    PÁGINA (public/)
  ───────                       ────────────────────────────────                   ────────────────
- 227 canales de YouTube     ┐  1. Lee el RSS del canal y de hasta 10 de sus     Galería por tema y sector
+ 225 canales de YouTube     ┐  1. Lee el RSS del canal y de hasta 10 de sus     Galería por tema y sector
    (y sus listas, por RSS)   │     listas de reproducción (gratis, sin clave)     Recomendados por país
- 25 blogs y revistas (RSS)   ├► 2. Acumula todo en data/biblioteca.json  ──►     Hashtags y buscador
- YouTube API (opcional)      │  3. Clasifica: tema + sector + hashtags           Listas y reproductor
- Tus enlaces manuales        ┘  4. Descarta lo que no es de seguridad            Clic → fuente original
-                                5. Arma las listas destacadas
-                                6. Escribe public/data/contenido.js
+ Vimeo, Dailymotion e        │     y las APIs públicas de Vimeo, Dailymotion      Hashtags y buscador
+   Internet Archive          ├►    e Internet Archive                       ──►   Listas y reproductor
+ 61 blogs y revistas (RSS)   │  2. Acumula todo en data/biblioteca.json          Clic → ver aquí o
+ YouTube API (opcional)      │  3. Clasifica: tema + sector + hashtags             en la fuente original
+ Tus enlaces manuales        ┘  4. Descarta lo que no es de seguridad
+                                5. Reparte el cupo (opciones.maxItems) por turnos entre fuentes
+                                6. Arma las listas destacadas y escribe public/data/contenido.js
 ```
 
 **Cómo se llega a miles de videos sin clave:** el RSS de un canal solo trae sus últimos 15 videos, pero cada lista de reproducción del canal tiene su propio RSS con otros 15. El recolector lee primero las listas cuyo título habla de seguridad (se revisan cada 7 días, `data/listas-canales.json`). Además quita de las descripciones el texto que un canal repite en todos sus videos (“Suscríbete a nuestro canal de Seguridad y Salud…”) para que solo pase lo que de verdad trata de seguridad.
 
-El portal no aloja nada: muestra título y miniatura públicos y enlaza a la fuente. El reproductor de listas usa el reproductor oficial de YouTube (embed).
+**Cupo parejo:** si hay más recursos que el tope (`opciones.maxItems`, hoy 8000), cada fuente aporta por turnos lo más nuevo que tiene. Así un canal que sube mucho no deja afuera a las fuentes chicas ni a los filmes antiguos.
+
+El portal no aloja nada: muestra título y miniatura públicos y enlaza a la fuente. Los videos se ven con el reproductor oficial (embed) de YouTube, Vimeo o Internet Archive.
 
 ## Qué necesitas
 
@@ -103,6 +109,7 @@ Después de agregar u ocultar, ejecuta `npm run recolectar` para que se refleje.
 | Quiero… | Edita |
 |---|---|
 | Agregar o quitar un canal de YouTube o un blog | `config/fuentes.json`. El canal acepta el ID `UC…` o el `@usuario`; el blog, la URL de su feed (en WordPress suele ser `https://sitio.com/feed/`). |
+| Agregar una cuenta de Vimeo, Dailymotion o una búsqueda de Internet Archive | En `config/fuentes.json`: `{ "tipo": "vimeo", "usuario": "retsdsafety" }` (o `"canal"`), `{ "tipo": "dailymotion", "usuario": "x33ay3q" }` (id de la cuenta), `{ "tipo": "archive", "busqueda": "title:(safety) AND title:(mining)" }`. Se recomienda poner `"excluir"` en las búsquedas para dejar afuera noticieros. |
 | Que una fuente que publica de todo solo deje pasar seguridad | En esa fuente: `"filtrar": true` |
 | Que todo lo de una fuente vaya a un tema / sugerir un sector | En esa fuente: `"categoria": "epp"` / `"sector": "mineria"` |
 | Descartar títulos con ciertas palabras | En la fuente: `"excluir": ["premios"]`, o `excluirGlobal` en `categorias.json` |

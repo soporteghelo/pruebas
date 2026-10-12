@@ -903,6 +903,7 @@ svg.relleno { fill: currentColor; stroke: none; }
 .sello-youtube { background: #E62117; }
 .sello-vimeo { background: #1AB7EA; }
 .sello-dailymotion { background: #0066DC; }
+.sello-archive { background: #3F3F46; }
 .sello-facebook { background: #1877F2; }
 .sello-tiktok { background: #111; }
 .sello-linkedin { background: #0A66C2; }
@@ -926,3 +927,17 @@ svg.relleno { fill: currentColor; stroke: none; }
 
 /* Palabras buscadas resaltadas en los títulos */
 .titulo mark { padding: 0 2px; border-radius: 3px; background: color-mix(in srgb, var(--acento) 45%, transparent); color: inherit; }
+
+/* Mini reproductor compacto (mitad de tamaño), abajo a la derecha */
+.flotante.minimizado { width: 200px; }
+.flotante.minimizado .flotante-barra { gap: 0; padding: 3px 3px 3px 8px; }
+.flotante.minimizado .flotante-info b { font-size: 12px; }
+.flotante.minimizado .flotante-info small { display: none; }
+.flotante.minimizado .flotante-barra .icono-btn { width: 30px; height: 30px; }
+.flotante.minimizado .flotante-barra .icono-btn svg { width: 16px; height: 16px; }
+.flotante.minimizado .flotante-barra .icono-btn[data-flotante="ampliar"] { display: none; } /* el título amplía */
+.flotante.sin-api .flotante-barra .icono-btn[data-flotante="pausa"] { display: none; } /* Vimeo, Dailymotion y Archive: se pausa en el propio video */
+@media (max-width: 960px) {
+  .flotante.minimizado { width: 200px; }
+  body.con-mini .aviso { bottom: calc(230px + env(safe-area-inset-bottom)); }
+}

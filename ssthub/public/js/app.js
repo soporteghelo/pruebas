@@ -177,8 +177,27 @@
     for (const i of ITEMS) i._rec = puntaje(i);
     ordenRecomendadoCache = null;
   }
-  const ordenRecomendado = () => (ordenRecomendadoCache ??= diversificar([...ITEMS].sort((a, b) => b._rec - a._rec)));
+  const ordenRecomendado = () => (ordenRecomendadoCache ??= repartirPorFuente(ITEMS, (i) => i._rec));
   calcularPuntajes();
+
+  // Reparto parejo entre fuentes: en cada vuelta entra el mejor recurso pendiente de cada fuente
+  // (empezando por la fuente cuyo siguiente recurso puntúa más), así ninguna acapara los resultados.
+  function repartirPorFuente(xs, puntaje) {
+    const grupos = new Map();
+    for (const i of xs) {
+      if (!grupos.has(i.fuenteId)) grupos.set(i.fuenteId, []);
+      grupos.get(i.fuenteId).push(i);
+    }
+    for (const g of grupos.values()) g.sort((a, b) => puntaje(b) - puntaje(a));
+    const salida = [];
+    let colas = [...grupos.values()];
+    while (colas.length) {
+      colas.sort((a, b) => puntaje(b[0]) - puntaje(a[0]));
+      for (const c of colas) salida.push(c.shift());
+      colas = colas.filter((c) => c.length);
+    }
+    return salida;
+  }
 
   // Variedad como en YouTube: cada recurso extra de una misma fuente pierde algo de puntaje
   // y luego se evita que dos de la misma fuente queden seguidos. Recibe la lista ya ordenada por puntaje.
@@ -209,10 +228,12 @@
   let ocultos = new Set(almacen.leer('ocultos', []));
   let misListas = almacen.leer('listas', []);
   let modoVista = almacen.leer('vista', 'grilla');
-  // Los videos de YouTube se ven dentro del portal (reproductor oficial). Se puede elegir abrirlos en YouTube.
-  // Abierto como archivo (doble clic) no se puede: YouTube no reproduce dentro de páginas sin dirección web.
+  // Los videos de YouTube, Vimeo, Dailymotion e Internet Archive se ven dentro del portal (con el reproductor
+  // oficial de cada uno). Se puede elegir abrirlos en su página. Abierto como archivo (doble clic) no se puede:
+  // los reproductores no funcionan dentro de páginas sin dirección web.
   let preferenciaVideos = almacen.leer('videos', 'aqui');
-  const verDentro = (i) => Boolean(i?.ytId) && !esArchivoLocal && preferenciaVideos === 'aqui';
+  const reproducible = (i) => Boolean(i?.ytId || i?.embed);
+  const verDentro = (i) => reproducible(i) && !esArchivoLocal && preferenciaVideos === 'aqui';
 
   // "Nuevo desde tu última visita": la referencia se fija al abrir y se mantiene durante la sesión.
   const refVisita = (() => {
@@ -286,7 +307,7 @@
       + x._rec * 0.35;
     const porFuente = new Map();
     const salida = visibles()
-      .filter((x) => x.ytId && x.id !== i.id && x.categorias.some((c) => temas.has(c)))
+      .filter((x) => reproducible(x) && x.id !== i.id && x.categorias.some((c) => temas.has(c)))
       .map((x) => ({ x, p: puntos(x) }))
       .sort((a, b) => b.p - a.p)
       .filter(({ x }) => { const n = porFuente.get(x.fuenteId) ?? 0; porFuente.set(x.fuenteId, n + 1); return n < 4; })
@@ -302,7 +323,7 @@
     if (!ref) return null;
     if (ref.startsWith('r-')) {
       const i = POR_ID.get(ref.slice(2));
-      if (!i?.ytId) return null;
+      if (!reproducible(i)) return null;
       const c0 = CATS.get(i.categorias[0]) || CAT_RESPALDO;
       return { ref, tipo: 'relacionados', nombre: 'A continuación', descripcion: `Relacionados con ${c0.nombre}`, icono: '▶️', color: c0.color, ids: [i.id, ...relacionados(i).map((x) => x.id)], editable: false };
     }
@@ -327,9 +348,9 @@
   // Estado y rutas
   //   #/  #/c/<tema>  #/s/<sector>  #/t/<hashtag>  #/f/<fuente>  #/explorar
   //   #/listas  #/lista/<ref>  #/ver/<ref>/<n>  #/guardados  #/vistos
-  //   filtros: ?q=&tipo=&sector=&idioma=&fuente=&orden=&nuevos=   lista compartida: ?n=&i=
+  //   filtros: ?q=&tipo=&sector=&idioma=&plat=&fuente=&orden=&nuevos=   lista compartida: ?n=&i=
   // =====================================================================
-  const FILTROS_BASE = { q: '', tipo: 'todo', sector: 'todos', idioma: 'todos', fuente: 'todas', orden: 'recomendados', nuevos: '', tags: '' };
+  const FILTROS_BASE = { q: '', tipo: 'todo', sector: 'todos', idioma: 'todos', plat: 'todas', fuente: 'todas', orden: 'recomendados', nuevos: '', tags: '' };
   const estado = { vista: 'inicio', id: null, pos: 0, compartida: null, ...FILTROS_BASE };
   const VISTAS = {
     c: 'categoria', s: 'sector', t: 'hashtag', f: 'fuente', explorar: 'explorar', categorias: 'explorar',
@@ -382,9 +403,9 @@
     if (el.herramientas.getBoundingClientRect().top < 0) el.herramientas.scrollIntoView({ block: 'start' });
   }
 
-  const hayFiltros = () => Boolean(estado.q) || estado.tipo !== 'todo' || estado.idioma !== 'todos' || estado.fuente !== 'todas'
+  const hayFiltros = () => Boolean(estado.q) || estado.tipo !== 'todo' || estado.idioma !== 'todos' || estado.plat !== 'todas' || estado.fuente !== 'todas'
     || estado.sector !== 'todos' || Boolean(estado.nuevos) || Boolean(estado.tags);
-  const cuantosFiltrosMovil = () => [estado.sector !== 'todos' && estado.vista !== 'sector', estado.idioma !== 'todos',
+  const cuantosFiltrosMovil = () => [estado.sector !== 'todos' && estado.vista !== 'sector', estado.idioma !== 'todos', estado.plat !== 'todas',
     estado.fuente !== 'todas' && estado.vista !== 'fuente', estado.orden !== 'recomendados', Boolean(estado.nuevos)].filter(Boolean).length;
 
   // ---------- Buscador ----------
@@ -568,7 +589,10 @@
       for (const i of xs) { const r = puntuar(i, bb); if (r) res.push({ i, r }); }
       return res;
     };
-    const porPuntos = (res) => res.sort((a, c) => c.r.puntos - a.r.puntos).map((x) => x.i);
+    const porPuntos = (res) => {
+      const puntos = new Map(res.map((x) => [x.i, x.r.puntos]));
+      return repartirPorFuente(res.map((x) => x.i), (i) => puntos.get(i));
+    };
     const res = evaluar(b);
     const completos = res.filter((x) => x.r.completo);
     if (completos.length) return { items: porPuntos(completos), modo: 'exacta', b };
@@ -588,7 +612,7 @@
       const temas = temasDeBusqueda(tokensDe(texto)).slice(0, 3);
       if (temas.length) {
         const ids = new Set(temas.flatMap((c) => [...temasDe(c.id)]));
-        return { items: xs.filter((i) => i.categorias.some((c) => ids.has(c))).sort((a, c) => c._rec - a._rec), modo: 'tema', temas, b };
+        return { items: repartirPorFuente(xs.filter((i) => i.categorias.some((c) => ids.has(c))), (i) => i._rec), modo: 'tema', temas, b };
       }
     }
     return { items: [], modo: 'vacia', b };
@@ -640,7 +664,7 @@
   const el = {
     lateral: $('#lateral'), velo: $('#velo'), chips: $('#chipsCat'), q: $('#q'), sugerencias: $('#sugerencias'),
     cabecera: $('#cabecera'), secciones: $('#secciones'), herramientas: $('#herramientas'), seg: $('#segTipo'),
-    selSector: $('#selSector'), selIdioma: $('#selIdioma'), selFuente: $('#selFuente'), selOrden: $('#selOrden'),
+    selSector: $('#selSector'), selIdioma: $('#selIdioma'), selPlat: $('#selPlat'), selFuente: $('#selFuente'), selOrden: $('#selOrden'),
     btnFiltros: $('#btnFiltros'), burbujaFiltros: $('#burbujaFiltros'),
     resultado: $('#resultado'), barraHashtags: $('#barraHashtags'), grilla: $('#grilla'), vacio: $('#vacio'), centinela: $('#centinela'), pie: $('#pie'),
     hoja: $('#hoja'), hojaVelo: $('#hojaVelo'), hojaTitulo: $('#hojaTitulo'), hojaCuerpo: $('#hojaCuerpo'),
@@ -694,6 +718,10 @@
     el.selSector.innerHTML = `<option value="todos">Todos los sectores</option>` +
       SECTORES_VISIBLES.map((s) => `<option value="${esc(s.id)}">${s.icono} ${esc(s.nombre)}</option>`).join('');
     el.selIdioma.closest('.select').hidden = new Set(ITEMS.map((i) => i.idioma)).size < 2;
+    const plats = opcionesPlataforma();
+    el.selPlat.innerHTML = '<option value="todas">Todas las plataformas</option>' +
+      plats.map(([k, nombre, n]) => `<option value="${k}">${nombre} (${nf.format(n)})</option>`).join('');
+    el.selPlat.closest('.select').hidden = plats.length < 2;
   }
 
   // Instalar la app y restaurar ocultos (cambian durante la sesión).
@@ -740,7 +768,7 @@
     return h ? `<a class="hashtag" href="#/t/${id}">#${esc(h.etiqueta)}${conCuenta ? `<span>${nf.format(h.total)}</span>` : ''}</a>` : '';
   };
   const avatarFuente = (nombre) => `<span class="avatar" style="--h:${tono(nombre)}" aria-hidden="true">${esc(inicial(nombre))}</span>`;
-  const destinoDe = (i) => (esYoutube(i._dom) ? 'YouTube' : i._dom);
+  const destinoDe = (i) => (esYoutube(i._dom) ? 'YouTube' : plataformaDe(i).clase === 'sello-web' ? i._dom : plataformaDe(i).nombre);
 
   const tile = (c, base = 'c') => `<a class="tile" href="#/${base}/${c.id}" style="--cat:${c.color}">
       ${c.portada ? `<img src="${esc(c.portada)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}
@@ -765,6 +793,7 @@
     [/(^|.)youtube.com$|^youtu.be$/, 'YouTube', 'sello-youtube'],
     [/(^|.)vimeo.com$/, 'Vimeo', 'sello-vimeo'],
     [/(^|.)dailymotion.com$/, 'Dailymotion', 'sello-dailymotion'],
+    [/(^|.)archive.org$/, 'Internet Archive', 'sello-archive'],
     [/(^|.)(facebook.com|fb.watch)$/, 'Facebook', 'sello-facebook'],
     [/(^|.)tiktok.com$/, 'TikTok', 'sello-tiktok'],
     [/(^|.)linkedin.com$/, 'LinkedIn', 'sello-linkedin'],
@@ -775,6 +804,15 @@
     if (!p) return { nombre: i._dom || 'Web', clase: 'sello-web' };
     return { nombre: p[1] === 'YouTube' && i.short ? 'YouTube Shorts' : p[1], clase: p[2] };
   }
+  const plataformaClave = (i) => (i._plat ??= plataformaDe(i).clase.replace('sello-', ''));
+  const NOMBRES_PLAT = [['youtube', 'YouTube'], ['vimeo', 'Vimeo'], ['dailymotion', 'Dailymotion'], ['archive', 'Internet Archive'],
+    ['facebook', 'Facebook'], ['tiktok', 'TikTok'], ['linkedin', 'LinkedIn'], ['web', 'Webs y blogs']];
+  function opcionesPlataforma() {
+    const n = new Map();
+    for (const i of ITEMS) n.set(plataformaClave(i), (n.get(plataformaClave(i)) ?? 0) + 1);
+    return NOMBRES_PLAT.filter(([k]) => n.has(k)).map(([k, nombre]) => [k, nombre, n.get(k)]);
+  }
+
   function selloTipo(i) {
     const p = plataformaDe(i);
     const icono = p.clase === 'sello-youtube' ? LOGO_YT : p.clase === 'sello-web' ? svg(i.tipo === 'documento' ? 'documento' : 'globo') : svg('play', 'relleno');
@@ -906,7 +944,7 @@
     } else if (vista === 'fuente') {
       const f = FUENTES.get(estado.id);
       html = `<div class="cab-fuente">${avatarFuente(f.nombre)}<div><p class="migas"><a href="#/explorar">Explorar</a> › Fuente${f.pais ? ` · ${esc(f.pais)}` : ''}</p>
-        <h1>${esc(f.nombre)}</h1><p>${plural(f.total, 'recurso', 'recursos')} · ${f.tipo === 'youtube' ? 'Canal de YouTube' : f.tipo === 'rss' ? 'Sitio web' : 'Selección'} · ${f.idioma === 'en' ? 'en inglés' : 'en español'}</p></div></div>`;
+        <h1>${esc(f.nombre)}</h1><p>${plural(f.total, 'recurso', 'recursos')} · ${{ youtube: 'Canal de YouTube', rss: 'Sitio web', vimeo: 'Cuenta de Vimeo', dailymotion: 'Dailymotion', archive: 'Internet Archive' }[f.tipo] ?? 'Selección'} · ${f.idioma === 'en' ? 'en inglés' : 'en español'}</p></div></div>`;
     } else if (vista === 'guardados') {
       html = cabSimple('Guardados', 'Tu lista personal. Se guarda en este navegador, sin cuentas ni contraseñas.',
         `<a class="boton boton-sec" href="#/listas">${svg('lista')} Mis listas</a>`);
@@ -983,12 +1021,13 @@
     const l = obtenerLista(estado.id);
     const items = itemsDeLista(l);
     const faltan = l.ids.length - items.length;
-    const videos = items.filter((i) => i.ytId);
+    const videos = items.filter((i) => i.tipo === 'video');
+    const deYoutube = videos.filter((i) => i.ytId);
     const total = items.reduce((s, i) => s + (i.duracion || 0), 0);
     const etiqueta = { mia: 'Tu lista', destacada: 'Lista destacada', compartida: 'Lista compartida' }[l.tipo];
     const acciones = [
       items.length ? `<a class="boton" href="#/ver/${l.ref}/0${l.ref === 'c' ? hashDe({ ...estado, vista: 'lista' }).replace(/^[^?]*/, '') : ''}">${svg('play')} Ver lista</a>` : '',
-      videos.length ? `<a class="boton boton-sec" href="${urlYoutubeDeLista(videos)}" target="_blank" rel="noopener noreferrer">${svg('externo')} Reproducir en YouTube</a>` : '',
+      deYoutube.length ? `<a class="boton boton-sec" href="${urlYoutubeDeLista(deYoutube)}" target="_blank" rel="noopener noreferrer">${svg('externo')} Reproducir en YouTube</a>` : '',
       items.length ? `<button type="button" class="boton boton-sec" data-accion="compartir-lista">${svg('compartir')} Compartir</button>` : '',
       l.editable ? `<button type="button" class="boton boton-sec" data-accion="renombrar-lista">${svg('lapiz')} Renombrar</button>
         <button type="button" class="boton boton-sec boton-peligro" data-accion="eliminar-lista">${svg('papelera')} Eliminar</button>`
@@ -1033,10 +1072,11 @@
   const urlYoutubeDeLista = (videos) => `https://www.youtube.com/watch_videos?video_ids=${videos.slice(0, 50).map((i) => i.ytId).join(',')}`;
 
   // ---------- Reproductor ----------
-  // Hay un solo reproductor de YouTube para toda la app (#flotante, fuera de la página). En la página del video
-  // se coloca encima del espacio reservado (#repPantalla); al navegar a otra parte pasa a "mini" en una esquina
-  // y sigue sonando. Nunca se mueve en el documento: mover un iframe lo recargaría y cortaría el video.
-  let reproductor = null; // { player, ref, ids, nombre, pos, ytId, compartida }
+  // Hay un solo reproductor para toda la app (#flotante, fuera de la página). En la página del video se coloca
+  // encima del espacio reservado (#repPantalla); al navegar a otra parte pasa a "mini" en una esquina y sigue
+  // sonando. Nunca se mueve en el documento: mover un iframe lo recargaría y cortaría el video.
+  // YouTube usa su API (pausa y avance automático); Vimeo, Dailymotion y Archive, el iframe de cada plataforma.
+  let reproductor = null; // { player, modo: 'yt' | 'iframe', clave, ref, ids, nombre, pos, compartida }
   let cargaApiYT = null;
   let avanceAutomatico = almacen.leer('autoavance', true);
   const flotante = $('#flotante');
@@ -1063,7 +1103,7 @@
     reproductor = null;
     $('#flotanteVideo').innerHTML = '<div id="repVideo"></div>';
     flotante.hidden = true;
-    flotante.classList.remove('minimizado');
+    flotante.classList.remove('minimizado', 'sin-api');
   }
 
   // Pone el reproductor sobre su espacio en la página del video, o en la esquina si estás en otra parte.
@@ -1098,28 +1138,43 @@
     $('#flotantePausa').setAttribute('aria-label', sonando ? 'Pausar' : 'Reproducir');
   }
 
+  const claveDe = (i) => i.ytId || i.embed;
+  const urlEmbed = (i) => `${i.embed}${i.embed.includes('?') ? '&' : '?'}autoplay=1`;
+
   // Empieza (o continúa, si ya es el mismo) el video de una lista.
   function reproducir(l, pos) {
     const i = POR_ID.get(l.ids[pos]);
-    if (!i?.ytId) return;
-    const mismo = reproductor && reproductor.ytId === i.ytId;
-    const datos = { ref: l.ref, ids: l.ids, nombre: l.nombre, pos, ytId: i.ytId, compartida: l.ref === 'c' ? estado.compartida : null };
-    if (reproductor) {
-      Object.assign(reproductor, datos);
-      if (!mismo && reproductor.player?.loadVideoById) reproductor.player.loadVideoById(i.ytId);
-      ubicarFlotante();
+    if (!reproducible(i)) return;
+    const mismo = reproductor && reproductor.clave === claveDe(i);
+    reproductor ??= { player: null, modo: null, clave: null };
+    Object.assign(reproductor, { ref: l.ref, ids: l.ids, nombre: l.nombre, pos, compartida: l.ref === 'c' ? estado.compartida : null });
+    if (!mismo) cargarVideo(i);
+    ubicarFlotante();
+  }
+
+  // Pone un video en el reproductor. Pasar de YouTube a otra plataforma (o al revés) cambia el iframe.
+  function cargarVideo(i) {
+    reproductor.clave = claveDe(i);
+    flotante.classList.toggle('sin-api', !i.ytId); // sin API no hay botón de pausa (se usa el del propio video)
+    if (!i.ytId) {
+      try { reproductor.player?.destroy(); } catch { /* ya no existe */ }
+      reproductor.player = null;
+      reproductor.modo = 'iframe';
+      $('#flotanteVideo').innerHTML = `<iframe id="repVideo" src="${esc(urlEmbed(i))}" title="${esc(i.titulo)}" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+      registrarVisto(i.id);
       return;
     }
-    reproductor = { ...datos, player: null };
-    ubicarFlotante();
+    if (reproductor.modo === 'yt') { reproductor.player?.loadVideoById?.(i.ytId); return; } // si aún carga, onReady lo pone
+    reproductor.modo = 'yt';
+    $('#flotanteVideo').innerHTML = '<div id="repVideo"></div>';
     cargarApiYoutube().then(() => {
-      if (!reproductor || reproductor.player) return;
+      if (reproductor?.modo !== 'yt' || reproductor.player) return;
       reproductor.player = new window.YT.Player('repVideo', {
-        videoId: reproductor.ytId,
+        videoId: reproductor.clave,
         host: 'https://www.youtube-nocookie.com',
         playerVars: { autoplay: 1, rel: 0, playsinline: 1, modestbranding: 1 },
         events: {
-          onReady: (e) => { if (reproductor && e.target.getVideoData?.().video_id !== reproductor.ytId) e.target.loadVideoById(reproductor.ytId); },
+          onReady: (e) => { if (reproductor?.modo === 'yt' && e.target.getVideoData?.().video_id !== reproductor.clave) e.target.loadVideoById(reproductor.clave); },
           onStateChange: (e) => {
             const actual = itemSonando();
             if (e.data === window.YT.PlayerState.PLAYING && actual) registrarVisto(actual.id);
@@ -1151,12 +1206,11 @@
       return true;
     }
     let pos = reproductor.pos + delta;
-    while (pos >= 0 && pos < reproductor.ids.length && !POR_ID.get(reproductor.ids[pos])?.ytId) pos += Math.sign(delta);
+    while (pos >= 0 && pos < reproductor.ids.length && !reproducible(POR_ID.get(reproductor.ids[pos]))) pos += Math.sign(delta);
     const i = POR_ID.get(reproductor.ids[pos]);
-    if (!i?.ytId) return false;
+    if (!reproducible(i)) return false;
     reproductor.pos = pos;
-    reproductor.ytId = i.ytId;
-    reproductor.player?.loadVideoById?.(i.ytId);
+    cargarVideo(i);
     actualizarBarraMini();
     return true;
   }
@@ -1207,13 +1261,13 @@
     const pantalla = $('#repPantalla');
     pantalla.innerHTML = '';
     delete pantalla.dataset.afuera;
-    if (i.ytId && !esArchivoLocal) {
+    if (reproducible(i) && !esArchivoLocal) {
       // Las listas se identifican por sus recursos (la de "A continuación" usa los que había al empezar).
       const ids = items.map((x) => x.id);
       reproducir({ ref: l.ref, ids, nombre: l.nombre }, estado.pos);
     } else {
       reproductor?.player?.pauseVideo?.();
-      if (i.ytId) pantallaAfuera(i, 'Para verla aquí, abre el portal con <b>ABRIR_PORTAL.bat</b> o desde su dirección en internet.');
+      if (reproducible(i)) pantallaAfuera(i, 'Para verla aquí, abre el portal con <b>ABRIR_PORTAL.bat</b> o desde su dirección en internet.');
       else pantallaAfuera(i, i.tipo === 'documento' ? 'Este recurso es un documento PDF.' : 'Este recurso es un artículo.', true);
     }
 
@@ -1225,7 +1279,7 @@
       <div class="rep-controles">
         <button type="button" class="boton boton-sec" data-rep="anterior" ${estado.pos === 0 ? 'disabled' : ''}>${svg('anterior')} Anterior</button>
         <button type="button" class="boton" data-rep="siguiente" ${sig ? '' : 'disabled'}>Siguiente ${svg('siguiente')}</button>
-        <label class="interruptor"><input type="checkbox" id="repAuto" ${avanceAutomatico ? 'checked' : ''}><span></span>Avance automático</label>
+        ${i.ytId || !reproducible(i) ? `<label class="interruptor"><input type="checkbox" id="repAuto" ${avanceAutomatico ? 'checked' : ''}><span></span>Avance automático</label>` : ''}
         <span class="rep-separador"></span>
         <button type="button" class="icono-btn fav-btn${guardado ? ' activo' : ''}" data-fav="${i.id}" aria-pressed="${guardado}" aria-label="${guardado ? 'Quitar de guardados' : 'Guardar'}">${svg('corazon')}</button>
         <a class="icono-btn" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer" data-salida="${i.id}" aria-label="Abrir en ${esc(destino)}" title="Abrir en ${esc(destino)}">${svg('externo')}</a>
@@ -1251,6 +1305,7 @@
     if (!pantalla) return;
     pantalla.dataset.afuera = '1';
     reproductor?.player?.pauseVideo?.();
+    if (reproductor?.modo === 'iframe') cerrarReproductor(); // sin API no se puede pausar: se cierra
     ubicarFlotante();
     pantalla.innerHTML = `<div class="rep-afuera" style="--cat:${(CATS.get(i.categorias[0]) || CAT_RESPALDO).color}">
       ${i.miniatura ? `<img src="${esc(i.miniatura)}" alt="" referrerpolicy="no-referrer">` : ''}
@@ -1276,6 +1331,7 @@
     if (estado.nuevos) xs = xs.filter(esNuevo);
     if (estado.sector !== 'todos' && vista !== 'sector') xs = xs.filter((i) => i.sectores.includes(estado.sector));
     if (estado.idioma !== 'todos') xs = xs.filter((i) => i.idioma === estado.idioma);
+    if (estado.plat !== 'todas') xs = xs.filter((i) => plataformaClave(i) === estado.plat);
     if (estado.fuente !== 'todas' && vista !== 'fuente') xs = xs.filter((i) => i.fuenteId === estado.fuente);
     const tags = tagsElegidos();
     if (tags.length) xs = xs.filter((i) => tags.every((t) => i.hashtags.includes(t)));
@@ -1334,6 +1390,7 @@
 
   function sincronizarControles() {
     el.selIdioma.value = estado.idioma;
+    el.selPlat.value = [...el.selPlat.options].some((o) => o.value === estado.plat) ? estado.plat : 'todas';
     el.selOrden.value = estado.orden;
     el.selFuente.value = FUENTES.has(estado.fuente) ? estado.fuente : 'todas';
     el.selSector.value = SECTORES.has(estado.sector) ? estado.sector : 'todos';
@@ -1362,7 +1419,8 @@
     const donde = nombres[estado.vista] ? ` en ${esc(nombres[estado.vista].get(estado.id).nombre)}` : '';
     const sector = estado.sector !== 'todos' && SECTORES.has(estado.sector) ? ` · sector ${esc(SECTORES.get(estado.sector).nombre)}` : '';
     const tags = tagsElegidos().map((h) => `#${esc(HASHTAGS.get(h).etiqueta)}`).join(' + ');
-    el.resultado.innerHTML = `<b>${plural(lista.length, 'recurso', 'recursos')}</b>${donde}${sector}${tags ? ` · ${tags}` : ''}${estado.nuevos ? ' · solo nuevos' : ''}` +
+    const plat = estado.plat !== 'todas' ? NOMBRES_PLAT.find(([k]) => k === estado.plat) : null;
+    el.resultado.innerHTML = `<b>${plural(lista.length, 'recurso', 'recursos')}</b>${donde}${sector}${plat ? ` · en ${plat[1]}` : ''}${tags ? ` · ${tags}` : ''}${estado.nuevos ? ' · solo nuevos' : ''}` +
       (hayFiltros() ? `<button type="button" class="limpiar" data-accion="limpiar">Quitar filtros</button>` : '');
   }
 
@@ -1552,7 +1610,7 @@
     const op = (accion, icono, texto, extra = '') => `<button type="button" class="menu-op" data-op="${accion}" data-id="${id}"${extra}>${svg(icono)}<span>${texto}</span></button>`;
     abrirHoja('Opciones', `${cabeceraItem(i)}
       <div class="menu">
-        ${i.ytId && !esArchivoLocal ? `<a class="menu-op" href="#/v/${id}">${svg('play', 'relleno')}<span>Ver aquí</span></a>` : ''}
+        ${reproducible(i) && !esArchivoLocal ? `<a class="menu-op" href="#/v/${id}">${svg('play', 'relleno')}<span>Ver aquí</span></a>` : ''}
         <a class="menu-op" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer" data-salida="${id}">${svg('externo')}<span>Abrir en ${esc(destinoDe(i))}</span></a>
         ${op('agregar-lista', 'lista', 'Agregar a una lista')}
         ${op('guardar', 'corazon', guardado ? 'Quitar de guardados' : 'Guardar')}
@@ -1590,6 +1648,7 @@
       fila('Ordenar por', 'orden', [['recomendados', 'Recomendados'], ['recientes', 'Más recientes'], ['vistas', 'Más vistos'], ['antiguos', 'Más antiguos'], ['az', 'A–Z']]),
       `<div class="filtro"><p class="filtro-titulo">Recomendaciones para</p><div class="filtro-ops"><button type="button" class="chip-opcion" data-accion="elegir-pais" aria-pressed="true">${esc(nombrePais(miPais))} · cambiar</button></div></div>`,
       new Set(ITEMS.map((i) => i.idioma)).size > 1 ? fila('Idioma', 'idioma', [['todos', 'Todos'], ['es', 'Español'], ['en', 'Inglés']]) : '',
+      opcionesPlataforma().length > 1 ? fila('Plataforma', 'plat', [['todas', 'Todas'], ...opcionesPlataforma().map(([k, nombre]) => [k, nombre])]) : '',
       refVisita ? fila('Novedades', 'nuevos', [['', 'Todo'], ['1', `Solo nuevos (${cuantosNuevos()})`]]) : '',
       fila('Ver como', 'vista', [['grilla', 'Cuadrícula'], ['lista', 'Lista']]),
       estado.vista !== 'fuente' ? `<div class="filtro"><p class="filtro-titulo">Fuente</p><label class="select select-ancho"><select data-filtro-select="fuente">${el.selFuente.innerHTML}</select>${svg('abajo')}</label></div>` : '',
@@ -2018,6 +2077,7 @@
 
   el.selSector.addEventListener('change', () => actualizarFiltros({ sector: el.selSector.value }));
   el.selIdioma.addEventListener('change', () => actualizarFiltros({ idioma: el.selIdioma.value }));
+  el.selPlat.addEventListener('change', () => actualizarFiltros({ plat: el.selPlat.value }));
   el.selFuente.addEventListener('change', () => actualizarFiltros({ fuente: el.selFuente.value }));
   el.selOrden.addEventListener('change', () => actualizarFiltros({ orden: el.selOrden.value }));
   el.btnFiltros.addEventListener('click', hojaFiltros);

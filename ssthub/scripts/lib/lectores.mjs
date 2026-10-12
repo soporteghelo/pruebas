@@ -202,6 +202,9 @@ function itemRss(it) {
     etiquetas: lista(it.category).map(txt).filter(Boolean),
     imagen: imagenDeMedios(it) ?? imagenDeMedios(it['media:group'] ?? {}) ?? imagenDeHtml(html) ?? imagenDeHtml(txt(it.description)),
     ytId: idYoutube(url),
+    // Vimeo y otras plataformas indican la dirección para insertar el video (media:player)
+    reproductor: lista(it['media:content']).map((m) => m['media:player']?.['@_url']).find(Boolean) ?? null,
+    duracion: Number(lista(it['media:content']).map((m) => m['@_duration']).find(Boolean)) || undefined,
   };
 }
 
@@ -210,7 +213,8 @@ function imagenDeMedios(nodo) {
     const u = m['@_url'];
     if (u && (m['@_medium'] === 'image' || /^image\//.test(m['@_type'] || '') || EXT_IMAGEN.test(u))) return u;
   }
-  const mini = lista(nodo['media:thumbnail'])[0]?.['@_url'];
+  const mini = lista(nodo['media:thumbnail'])[0]?.['@_url']
+    ?? lista(nodo['media:content']).flatMap((m) => lista(m['media:thumbnail']))[0]?.['@_url']; // Vimeo la anida en media:content
   if (mini) return mini;
   const adj = lista(nodo.enclosure).find((x) => /^image\//.test(x['@_type'] || '') || EXT_IMAGEN.test(x['@_url'] || ''));
   return adj?.['@_url'] ?? null;
@@ -259,4 +263,72 @@ export async function leerMetaPagina(url) {
     tipoOg: metas['og:type'] || '',
     fecha: metas['article:published_time'] || metas['og:updated_time'] || '',
   };
+}
+
+// ---------- Otras plataformas de video ----------
+
+export const idVimeo = (url = '') => String(url).match(/vimeo\.com\/(?:video\/)?(\d{5,})/)?.[1] ?? null;
+export const urlFeedVimeo = (f) => f.url || `https://vimeo.com/${f.usuario}/videos/rss`;
+
+// Vimeo: su API pública antigua (sin clave) da hasta 3 páginas de 20 videos por cuenta o canal; el RSS solo da 10.
+export async function videosVimeo({ usuario, canal, limite = 60 }) {
+  const base = canal ? `https://vimeo.com/api/v2/channel/${encodeURIComponent(canal)}/videos.json` : `https://vimeo.com/api/v2/${encodeURIComponent(usuario)}/videos.json`;
+  const videos = [];
+  for (let pagina = 1; pagina <= 3 && videos.length < limite; pagina++) {
+    const lote = await obtener(`${base}?page=${pagina}`, { json: true }).catch((err) => { if (pagina === 1) throw err; return []; });
+    if (!Array.isArray(lote) || !lote.length) break;
+    videos.push(...lote);
+    if (lote.length < 20) break;
+  }
+  return videos.slice(0, limite).map((v) => ({
+    id: String(v.id),
+    titulo: decodificar(v.title || ''),
+    descripcion: decodificar(String(v.description || '').replace(/<br\s*\/?>/gi, ' ')),
+    imagen: v.thumbnail_large || v.thumbnail_medium,
+    url: v.url || `https://vimeo.com/${v.id}`,
+    fecha: v.upload_date ? new Date(v.upload_date.replace(' ', 'T') + 'Z').toISOString() : null,
+    vistas: v.stats_number_of_plays || undefined,
+    duracion: v.duration || undefined,
+    autor: v.user_name,
+    etiquetas: v.tags ? String(v.tags).split(',').map((t) => t.trim()).filter(Boolean) : undefined,
+  }));
+}
+
+// Dailymotion: API pública sin clave. Por cuenta (usuario) o por búsqueda.
+export async function videosDailymotion({ usuario, busqueda, idioma, limite = 100 }) {
+  const campos = 'id,title,description,thumbnail_480_url,url,created_time,views_total,duration,owner.screenname,owner.id';
+  const base = usuario ? `https://api.dailymotion.com/user/${encodeURIComponent(usuario)}/videos` : 'https://api.dailymotion.com/videos';
+  const p = new URLSearchParams({ fields: campos, limit: String(Math.min(limite, 100)), sort: usuario ? 'recent' : 'relevance' });
+  if (busqueda) p.set('search', busqueda);
+  if (busqueda && idioma) p.set('languages', idioma);
+  const r = await obtener(`${base}?${p}`, { json: true });
+  return (r.list || []).map((v) => ({
+    id: v.id,
+    titulo: decodificar(v.title || ''),
+    descripcion: decodificar(v.description || ''),
+    imagen: v.thumbnail_480_url,
+    url: v.url || `https://www.dailymotion.com/video/${v.id}`,
+    fecha: v.created_time ? new Date(v.created_time * 1000).toISOString() : null,
+    vistas: v.views_total || undefined,
+    duracion: v.duration || undefined,
+    autor: v['owner.screenname'],
+  }));
+}
+
+// Internet Archive: búsqueda en su colección de películas (incluye filmes clásicos de capacitación).
+export async function videosArchive({ busqueda, limite = 100 }) {
+  const p = new URLSearchParams({ q: `(${busqueda}) AND mediatype:movies AND -collection:tvarchive AND -collection:tvnews`, rows: String(limite), output: 'json' });
+  p.append('sort[]', 'downloads desc');
+  for (const f of ['identifier', 'title', 'description', 'date', 'publicdate', 'downloads']) p.append('fl[]', f);
+  const r = await obtener(`https://archive.org/advancedsearch.php?${p}`, { json: true, timeout: 30000 });
+  const uno = (v) => (Array.isArray(v) ? v.join(' ') : v || '');
+  return (r.response?.docs || []).map((d) => ({
+    id: d.identifier,
+    titulo: uno(d.title),
+    descripcion: uno(d.description),
+    imagen: `https://archive.org/services/img/${d.identifier}`,
+    url: `https://archive.org/details/${d.identifier}`,
+    fecha: d.date || d.publicdate || null, // si no se sabe el año del filme, la fecha en que se subió
+    vistas: d.downloads || undefined,
+  }));
 }
