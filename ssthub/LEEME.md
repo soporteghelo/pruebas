@@ -123,6 +123,14 @@ El archivo `.env` no se sube a GitHub (está en `.gitignore`).
 
 > **Si el proyecto está en una subcarpeta** (por ejemplo `pruebas/ssthub/`): GitHub solo ejecuta los workflows que están en `.github/workflows/` de la **raíz** del repositorio. Para activarlo, copia `actualizar.yml` a la raíz, agrega `defaults: { run: { working-directory: ssthub } }` al trabajo y cambia `path: public` por `path: ssthub/public` (y las rutas de `git add`). Ojo: GitHub Pages publica un solo sitio por repositorio.
 
+### Publicarlo en Vercel
+
+1. En Vercel: *Add New → Project* e importa el repositorio.
+2. En **Root Directory** elige la carpeta del proyecto (por ejemplo `ssthub`).
+3. Listo. El archivo `vercel.json` ya le dice a Vercel que es un sitio estático: no compila nada y publica la carpeta `public/`. Así no importa qué preset (Vite, Next…) tenga elegido el proyecto en el panel.
+
+Para actualizar el contenido publicado: ejecuta `ACTUALIZAR_PORTAL.bat` en tu computadora y sube los cambios (`public/data/contenido.js` y `data/`) a GitHub; Vercel vuelve a publicar solo.
+
 ## Estructura
 
 ```
