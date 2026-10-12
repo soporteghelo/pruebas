@@ -177,26 +177,36 @@
     for (const i of ITEMS) i._rec = puntaje(i);
     ordenRecomendadoCache = null;
   }
-  const ordenRecomendado = () => (ordenRecomendadoCache ??= repartirPorFuente(ITEMS, (i) => i._rec));
+  const ordenRecomendado = () => (ordenRecomendadoCache ??= repartir(ITEMS, (i) => i._rec));
   calcularPuntajes();
 
-  // Reparto parejo entre fuentes: en cada vuelta entra el mejor recurso pendiente de cada fuente
-  // (empezando por la fuente cuyo siguiente recurso puntúa más), así ninguna acapara los resultados.
-  function repartirPorFuente(xs, puntaje) {
+  // Reparto parejo: primero entre plataformas (YouTube, Vimeo, Dailymotion, Internet Archive, webs y blogs)
+  // y, dentro de cada plataforma, entre fuentes. En cada vuelta entra el mejor recurso pendiente de cada
+  // grupo (empezando por el que puntúa más): ni una plataforma ni una fuente acaparan los resultados.
+  function agruparPor(xs, clave) {
     const grupos = new Map();
     for (const i of xs) {
-      if (!grupos.has(i.fuenteId)) grupos.set(i.fuenteId, []);
-      grupos.get(i.fuenteId).push(i);
+      const k = clave(i);
+      if (!grupos.has(k)) grupos.set(k, []);
+      grupos.get(k).push(i);
     }
-    for (const g of grupos.values()) g.sort((a, b) => puntaje(b) - puntaje(a));
+    return [...grupos.values()];
+  }
+  function porTurnos(colas, puntaje) {
     const salida = [];
-    let colas = [...grupos.values()];
-    while (colas.length) {
-      colas.sort((a, b) => puntaje(b[0]) - puntaje(a[0]));
-      for (const c of colas) salida.push(c.shift());
-      colas = colas.filter((c) => c.length);
+    let activas = colas.filter((c) => c.length).map((c) => ({ c, k: 0 }));
+    while (activas.length) {
+      activas.sort((a, b) => puntaje(b.c[b.k]) - puntaje(a.c[a.k]));
+      for (const a of activas) salida.push(a.c[a.k++]);
+      activas = activas.filter((a) => a.k < a.c.length);
     }
     return salida;
+  }
+  function repartir(xs, puntaje) {
+    const mejorPrimero = (g) => g.sort((a, b) => puntaje(b) - puntaje(a));
+    const porPlataforma = agruparPor(xs, plataformaClave)
+      .map((p) => porTurnos(agruparPor(p, (i) => i.fuenteId).map(mejorPrimero), puntaje));
+    return porTurnos(porPlataforma, puntaje);
   }
 
   // Variedad como en YouTube: cada recurso extra de una misma fuente pierde algo de puntaje
@@ -591,7 +601,7 @@
     };
     const porPuntos = (res) => {
       const puntos = new Map(res.map((x) => [x.i, x.r.puntos]));
-      return repartirPorFuente(res.map((x) => x.i), (i) => puntos.get(i));
+      return repartir(res.map((x) => x.i), (i) => puntos.get(i));
     };
     const res = evaluar(b);
     const completos = res.filter((x) => x.r.completo);
@@ -612,7 +622,7 @@
       const temas = temasDeBusqueda(tokensDe(texto)).slice(0, 3);
       if (temas.length) {
         const ids = new Set(temas.flatMap((c) => [...temasDe(c.id)]));
-        return { items: repartirPorFuente(xs.filter((i) => i.categorias.some((c) => ids.has(c))), (i) => i._rec), modo: 'tema', temas, b };
+        return { items: repartir(xs.filter((i) => i.categorias.some((c) => ids.has(c))), (i) => i._rec), modo: 'tema', temas, b };
       }
     }
     return { items: [], modo: 'vacia', b };
@@ -665,7 +675,7 @@
     lateral: $('#lateral'), velo: $('#velo'), chips: $('#chipsCat'), q: $('#q'), sugerencias: $('#sugerencias'),
     cabecera: $('#cabecera'), secciones: $('#secciones'), herramientas: $('#herramientas'), seg: $('#segTipo'),
     selSector: $('#selSector'), selIdioma: $('#selIdioma'), selPlat: $('#selPlat'), selFuente: $('#selFuente'), selOrden: $('#selOrden'),
-    btnFiltros: $('#btnFiltros'), burbujaFiltros: $('#burbujaFiltros'),
+    btnFiltros: $('#btnFiltros'), burbujaFiltros: $('#burbujaFiltros'), barraPlat: $('#barraPlat'),
     resultado: $('#resultado'), barraHashtags: $('#barraHashtags'), grilla: $('#grilla'), vacio: $('#vacio'), centinela: $('#centinela'), pie: $('#pie'),
     hoja: $('#hoja'), hojaVelo: $('#hojaVelo'), hojaTitulo: $('#hojaTitulo'), hojaCuerpo: $('#hojaCuerpo'),
     btnMas: $('#btnMas'), btnInstalar: $('#btnInstalar'),
@@ -927,9 +937,14 @@
       } else if (busqueda?.modo === 'parcial') {
         html = cabSimple(`Resultados para “${esc(q)}”`, `Ningún recurso tiene todas las palabras; mostramos los que tienen la mayoría. Prueba con menos palabras, por ejemplo ${otra(busqueda.b.crudas[0])}.`);
       } else {
-        const temas = temasDeBusqueda(tokensBusqueda()).slice(0, 4);
-        html = cabSimple(`Resultados para “${esc(q)}”`, 'Recursos que lo mencionan en el título, la descripción o sus hashtags. Primero los que lo dicen en el título.') +
-          (temas.length ? `<div class="relacionadas relacionadas-busqueda"><span>Ver el tema completo:</span>${temas.map((c) => chipCat(c)).join('')}</div>` : '');
+        const porTema = new Map();
+        for (const i of ambito) for (const c of i.categorias) porTema.set(c, (porTema.get(c) ?? 0) + 1);
+        const afinar = [...porTema].filter(([c, n]) => CATS.has(c) && n >= 2 && n < ambito.length).sort((a, b) => b[1] - a[1]).slice(0, 8);
+        html = cabSimple(`Resultados para “${esc(q)}”`, 'Recursos que lo mencionan en el título, la descripción o sus hashtags, repartidos entre plataformas y fuentes. Al final de la lista seguimos buscando en blogs, Dailymotion e Internet Archive.') +
+          (afinar.length ? `<div class="relacionadas relacionadas-busqueda"><span>Afinar por tema:</span>${afinar.map(([c, n]) => {
+            const x = CATS.get(c);
+            return `<a class="chip chip-cat" href="#/c/${c}?q=${encodeURIComponent(q)}" style="--cat:${x.color}"><span aria-hidden="true">${x.icono}</span>${esc(x.nombre)}<small>${nf.format(n)}</small></a>`;
+          }).join('')}</div>` : '');
       }
     } else if (vista === 'categoria') {
       html = cabeceraGrupo(CATS.get(estado.id), 'c', 'Tema');
@@ -997,7 +1012,7 @@
         `<a class="hashtag" href="#/t/${h.id}" style="--peso:${(0.85 + 0.75 * Math.sqrt(h.total / tagsMax)).toFixed(2)}">#${esc(h.etiqueta)}<span>${nf.format(h.total)}</span></a>`).join('')}</div>`)}</div>` : '',
       seccion('Fuentes', '', `<div class="fuentes-grilla">${fuentes.map((f) => `
         <a class="fuente-card" href="#/f/${f.id}">${avatarFuente(f.nombre)}<span><b>${esc(f.nombre)}</b>
-          <small>${f.tipo === 'youtube' ? 'YouTube' : f.tipo === 'rss' ? 'Web' : 'Selección'}${f.pais ? ` · ${esc(f.pais)}` : ''} · ${plural(f.total, 'recurso', 'recursos')}</small></span></a>`).join('')}</div>`),
+          <small>${{ youtube: 'YouTube', rss: 'Web', vimeo: 'Vimeo', dailymotion: 'Dailymotion', archive: 'Internet Archive' }[f.tipo] ?? 'Selección'}${f.pais ? ` · ${esc(f.pais)}` : ''} · ${plural(f.total, 'recurso', 'recursos')}</small></span></a>`).join('')}</div>`),
     ].join('');
     if (location.hash.endsWith('#hashtags')) $('#hashtags')?.scrollIntoView();
   }
@@ -1319,6 +1334,10 @@
   // =====================================================================
   // Lista de recursos (grilla)
   // =====================================================================
+  // Primero el ámbito de la página (tema, sector, hashtag, fuente…) y la búsqueda; después los filtros.
+  // Así se puede contar cuántos resultados daría cada opción de filtro y no ofrecer callejones sin salida.
+  let ambito = [];
+  let facetas = null;
   function alcance() {
     let xs = visibles();
     const { vista, id } = estado;
@@ -1329,19 +1348,88 @@
     else if (vista === 'guardados') xs = ITEMS.filter((i) => guardados.has(i.id));
     else if (vista === 'vistos') xs = ITEMS.filter((i) => vistos[i.id]);
     if (estado.nuevos) xs = xs.filter(esNuevo);
-    if (estado.sector !== 'todos' && vista !== 'sector') xs = xs.filter((i) => i.sectores.includes(estado.sector));
-    if (estado.idioma !== 'todos') xs = xs.filter((i) => i.idioma === estado.idioma);
-    if (estado.plat !== 'todas') xs = xs.filter((i) => plataformaClave(i) === estado.plat);
-    if (estado.fuente !== 'todas' && vista !== 'fuente') xs = xs.filter((i) => i.fuenteId === estado.fuente);
-    const tags = tagsElegidos();
-    if (tags.length) xs = xs.filter((i) => tags.every((t) => i.hashtags.includes(t)));
     busqueda = null;
     if (estado.q.trim()) {
       busqueda = buscarEn(xs, estado.q, { permitirTema: vista !== 'categoria' });
-      return busqueda.items;
+      xs = busqueda.items;
     }
+    ambito = xs;
+    return filtrar(xs);
+  }
+
+  // Filtros activos (sin contar el tipo, que tiene sus propios botones). "excepto" deja uno afuera para contar.
+  function filtrar(xs, excepto = null) {
+    const tags = tagsElegidos();
+    const pruebas = [
+      ['sector', estado.sector !== 'todos' && estado.vista !== 'sector', (i) => i.sectores.includes(estado.sector)],
+      ['idioma', estado.idioma !== 'todos', (i) => i.idioma === estado.idioma],
+      ['plat', estado.plat !== 'todas', (i) => plataformaClave(i) === estado.plat],
+      ['fuente', estado.fuente !== 'todas' && estado.vista !== 'fuente', (i) => i.fuenteId === estado.fuente],
+      ['tags', tags.length > 0, (i) => tags.every((t) => i.hashtags.includes(t))],
+    ].filter(([clave, activo]) => activo && clave !== excepto).map(([, , f]) => f);
+    return pruebas.length ? xs.filter((i) => pruebas.every((f) => f(i))) : xs;
+  }
+  const conTipo = (xs, tipo = estado.tipo) => (tipo === 'todo' ? xs : xs.filter((i) => i.tipo === tipo));
+
+  // Cuántos resultados daría cada opción de cada filtro, con el resto de los filtros como están.
+  function contarFacetas() {
+    const contar = (excepto, claves) => {
+      const m = new Map();
+      for (const i of conTipo(filtrar(ambito, excepto))) for (const k of [].concat(claves(i))) m.set(k, (m.get(k) ?? 0) + 1);
+      return m;
+    };
+    return {
+      sector: contar('sector', (i) => i.sectores),
+      idioma: contar('idioma', (i) => i.idioma),
+      plat: contar('plat', plataformaClave),
+      fuente: contar('fuente', (i) => i.fuenteId),
+      totalSector: conTipo(filtrar(ambito, 'sector')).length,
+      totalIdioma: conTipo(filtrar(ambito, 'idioma')).length,
+      totalPlat: conTipo(filtrar(ambito, 'plat')).length,
+      totalFuente: conTipo(filtrar(ambito, 'fuente')).length,
+    };
+  }
+
+  // Los selectores muestran cuántos resultados da cada opción; las que dejarían la página vacía se desactivan.
+  function pintarSelects() {
+    const f = facetas;
+    const op = (valor, texto, n, actual) => `<option value="${esc(valor)}"${n || valor === actual ? '' : ' disabled'}>${texto} (${nf.format(n || 0)})</option>`;
+    el.selSector.innerHTML = op('todos', 'Todos los sectores', f.totalSector, estado.sector)
+      + SECTORES_VISIBLES.map((x) => op(x.id, `${x.icono} ${esc(x.nombre)}`, f.sector.get(x.id), estado.sector)).join('');
+    el.selIdioma.innerHTML = op('todos', 'Todos los idiomas', f.totalIdioma, estado.idioma)
+      + op('es', 'Español', f.idioma.get('es'), estado.idioma) + op('en', 'Inglés', f.idioma.get('en'), estado.idioma);
+    el.selPlat.innerHTML = op('todas', 'Todas las plataformas', f.totalPlat, estado.plat)
+      + NOMBRES_PLAT.filter(([k]) => f.plat.get(k) || k === estado.plat).map(([k, nombre]) => op(k, nombre, f.plat.get(k), estado.plat)).join('');
+    const fuentes = [...FUENTES.values()].filter((x) => f.fuente.get(x.id) || x.id === estado.fuente)
+      .sort((a, b) => (f.fuente.get(b.id) ?? 0) - (f.fuente.get(a.id) ?? 0) || a.nombre.localeCompare(b.nombre, 'es'));
+    el.selFuente.innerHTML = op('todas', 'Todas las fuentes', f.totalFuente, estado.fuente)
+      + fuentes.map((x) => op(x.id, esc(x.nombre), f.fuente.get(x.id), estado.fuente)).join('');
+  }
+
+  // Plataformas como pestañas con su cantidad (como las pestañas de un buscador): de un toque ves solo blogs, solo Vimeo…
+  function pintarBarraPlat() {
+    const f = facetas;
+    const plats = NOMBRES_PLAT.filter(([k]) => f.plat.get(k) || k === estado.plat);
+    el.barraPlat.hidden = plats.length < 2 && estado.plat === 'todas';
+    if (el.barraPlat.hidden) { el.barraPlat.innerHTML = ''; return; }
+    const pill = (valor, nombre, n) => `<button type="button" class="plat-pill${valor === estado.plat ? ' activo' : ''}" data-filtro="plat" data-valor="${valor}" aria-pressed="${valor === estado.plat}"${n || valor === estado.plat ? '' : ' disabled'}>${nombre}<span>${nf.format(n || 0)}</span></button>`;
+    el.barraPlat.innerHTML = `<span class="barra-hashtags-titulo">${svg('play')} Ver en</span>`
+      + pill('todas', 'Todas', f.totalPlat) + plats.map(([k, nombre]) => pill(k, nombre, f.plat.get(k))).join('');
+  }
+
+  // Filtros activos como etiquetas con ×: se ve qué está filtrando y se quita de un toque.
+  function filtrosActivos() {
+    const xs = [];
+    if (estado.q) xs.push(['q', '', `“${esc(estado.q)}”`]);
+    if (estado.tipo !== 'todo') xs.push(['tipo', 'todo', TIPOS.find(([t]) => t === estado.tipo)?.[1] ?? estado.tipo]);
+    if (estado.sector !== 'todos' && estado.vista !== 'sector' && SECTORES.has(estado.sector)) xs.push(['sector', 'todos', esc(SECTORES.get(estado.sector).nombre)]);
+    if (estado.idioma !== 'todos') xs.push(['idioma', 'todos', estado.idioma === 'es' ? 'Español' : 'Inglés']);
+    if (estado.plat !== 'todas') xs.push(['plat', 'todas', NOMBRES_PLAT.find(([k]) => k === estado.plat)?.[1] ?? estado.plat]);
+    if (estado.fuente !== 'todas' && estado.vista !== 'fuente' && FUENTES.has(estado.fuente)) xs.push(['fuente', 'todas', esc(FUENTES.get(estado.fuente).nombre)]);
+    if (estado.nuevos) xs.push(['nuevos', '', 'Solo nuevos']);
     return xs;
   }
+  const chipQuitar = ([clave, valor, texto]) => `<button type="button" class="filtro-activo" data-filtro="${clave}" data-valor="${valor}" title="Quitar este filtro">${texto} ${svg('cerrar')}</button>`;
   const tagsElegidos = () => (estado.tags ? estado.tags.split(',').filter((t) => HASHTAGS.has(t)) : []);
 
   // Barra de hashtags: los más frecuentes entre los resultados actuales; cada uno que eliges afina más.
@@ -1372,8 +1460,10 @@
         if (estado.vista === 'vistos') return copia.sort((a, b) => vistos[b.id] - vistos[a.id]);
         // En una búsqueda, el buscador ya los dejó ordenados por relevancia.
         if (busqueda?.modo && busqueda.modo !== 'tema') return copia;
-        const incluidos = new Set(copia);
-        return ordenRecomendado().filter((i) => incluidos.has(i));
+        // Todo el catálogo: orden ya calculado. Un tema, sector o filtro: se reparte de nuevo entre las
+        // plataformas y fuentes que tiene, para que se turnen también ahí.
+        if (copia.length === ITEMS.length) return ordenRecomendado();
+        return repartir(copia, (i) => i._rec);
       }
     }
   }
@@ -1404,24 +1494,223 @@
   }
 
   function pintarMas() {
+    const desde = mostrados;
     const lote = lista.slice(mostrados, mostrados + POR_PAGINA);
-    el.grilla.insertAdjacentHTML('beforeend', lote.map(tarjeta).join(''));
+    const inicioAfuera = afuera?.clave === claveAfuera() ? afuera.inicio : -1;
+    el.grilla.insertAdjacentHTML('beforeend', lote.map((i, k) => (desde + k === inicioAfuera ? separadorAfuera() : '') + tarjeta(i)).join(''));
     mostrados += lote.length;
-    // Si la pantalla es alta y aún no hay scroll, se carga otro lote.
+    // Si la pantalla es alta y aún no hay scroll, se carga otro lote (o se buscan más resultados afuera).
     requestAnimationFrame(() => {
-      if (mostrados < lista.length && el.centinela.getBoundingClientRect().top < innerHeight + 900) pintarMas();
+      if (el.centinela.getBoundingClientRect().top > innerHeight + 900) return;
+      if (mostrados < lista.length) pintarMas();
+      else buscarAfuera();
     });
   }
 
+  // ---------- Más resultados en otras plataformas ----------
+  // Cuando se acaban los resultados de una búsqueda, se sigue buscando en vivo en Dailymotion e Internet
+  // Archive (sus APIs públicas se pueden consultar desde el navegador). Para que solo entre material de
+  // seguridad laboral, el título debe tener lo buscado y además otra palabra de seguridad o de formación
+  // ("uso de", "tipos", "curso", "NFPA"…); se descartan noticieros, películas, deportes y música.
+  const CONTEXTO_TITULO = /(?<![a-z])(segur|safety|prevenc|prevent|riesgo|risk|peligr|hazard|osha|niosh|msha|nfpa|sst|ssoma|hse|ehs|epp|ppe|capacitaci|training|curso|course|charla|tutorial|como usar|how to|uso de|use of|using|manejo|tipos|types|clases|classes|procedimient|procedure|inspecci|inspection|norma|standard|simulacro|drill|protecci|protection|laboral|ocupacion|occupational|workplace|industrial|primeros auxilios|first aid|rescate|rescue|emergenc)/;
+  const PARECE_NOTICIERO = /(?<![a-z])(notici|news|tv|televis|radio|diario|periodis|press|prensa|jornal|canal|multimedia|milenio|telesur|abc|nbc|cbs|cnn|fox|record|band|sbt|globo|wochit|buzz|viral|storyful|newsflare)/;
+  // En los blogs de SST basta con que el título o el resumen hablen de seguridad o de trabajo.
+  const CONTEXTO_SST = /(?<![a-z])(segur|safety|safe|prevenc|prevent|riesgo|risk|peligr|hazard|trabaj|work|laboral|ocupacion|occupational|osha|niosh|msha|sst|ssoma|hse|ehs|epp|ppe|capacitaci|training|curso|course|charla|norma|nfpa|iso|accident|incident|emergenc|incendi|fire|rescat|rescue|salud|health|industri|obra|construc|miner|mining|mine)/;
+  const BLOGS_WP = [...FUENTES.values()].filter((f) => f.wp);
+  const BLOGS_SIN_BUSQUEDA = new Set(); // blogs que no respondieron o ignoran la búsqueda
+  const EXCLUIR_AFUERA = new RegExp(`(?<![a-z0-9])(${[...(D.excluir || []), 'trailer', 'teaser', 'movie', 'pelicula', 'mlb', 'nba', 'nfl', 'nhl', 'fail', 'fails',
+    'funny', 'prank', 'gta', 'lego', 'cancion', 'song', 'music', 'musica', 'concierto', 'concert', 'news', 'noticias', 'noticiero', 'telediario']
+    .map((t) => escaparRe(norm(t)).replace(/\\\*/g, '[a-z0-9]*')).join('|')})(?![a-z0-9])`);
+  const textoPlano = (t) => String(t || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&amp;|&quot;|&#39;/g, ' ').replace(/\s+/g, ' ').trim();
+  const PLATAFORMAS_AFUERA = [
+    {
+      plataforma: 'web',
+      nombre: 'blogs de SST',
+      tipo: 'articulo',
+      // Se pregunta a todos los blogs WordPress de las fuentes a la vez (5 artículos por blog y por página).
+      // Algunos blogs ignoran la búsqueda y devuelven sus últimos artículos: si ninguno menciona lo buscado,
+      // a ese blog no se le vuelve a preguntar en esta visita.
+      async leer(q, pagina, b, estadoBusqueda) {
+        const agotados = (estadoBusqueda.blogsAgotados ??= new Set()); // blogs que ya dieron todo lo que tenían
+        const menciona = (x) => { const t = norm(`${textoPlano(x.title?.rendered)} ${textoPlano(x.excerpt?.rendered)}`); return b.terminos.some((u) => u.p.test(t) || u.alt.some((p) => p.test(t))); };
+        const lotes = await Promise.all(BLOGS_WP.filter((f) => !BLOGS_SIN_BUSQUEDA.has(f.id) && !agotados.has(f.id)).map(async (f) => {
+          const p = new URLSearchParams({ search: q, per_page: '5', page: String(pagina), _fields: 'id,date_gmt,link,title,excerpt,jetpack_featured_media_url,yoast_head_json.og_image' });
+          try {
+            const r = await fetch(`${f.wp}posts?${p}`, { signal: AbortSignal.timeout(9000) });
+            const posts = r.ok ? await r.json() : [];
+            if (!Array.isArray(posts) || posts.length < 5) agotados.add(f.id);
+            if (!Array.isArray(posts)) return { f, mas: false, posts: [] };
+            if (posts.length && !posts.some(menciona)) { BLOGS_SIN_BUSQUEDA.add(f.id); return { f, mas: false, posts: [] }; }
+            return { f, mas: posts.length === 5, posts };
+          } catch { BLOGS_SIN_BUSQUEDA.add(f.id); return { f, mas: false, posts: [] }; }
+        }));
+        return {
+          mas: lotes.some((x) => x.mas),
+          videos: lotes.flatMap(({ f, posts }) => posts.map((x) => ({
+            tipo: 'articulo', url: x.link, titulo: textoPlano(x.title?.rendered), resumen: x.excerpt?.rendered,
+            miniatura: x.jetpack_featured_media_url || x.yoast_head_json?.og_image?.[0]?.url || undefined,
+            fecha: x.date_gmt ? `${x.date_gmt}Z` : null, fuente: f.nombre, fuenteId: f.id, idioma: f.idioma, pais: f.pais || undefined,
+          }))),
+        };
+      },
+    },
+    {
+      plataforma: 'dailymotion',
+      nombre: 'Dailymotion',
+      tipo: 'video',
+      async leer(q, pagina) {
+        const p = new URLSearchParams({ search: q, limit: '50', page: String(pagina), sort: 'relevance', languages: 'es,en',
+          fields: 'id,title,description,thumbnail_480_url,url,created_time,views_total,duration,owner.screenname,language' });
+        const r = await fetch(`https://api.dailymotion.com/videos?${p}`).then((x) => x.json());
+        return {
+          mas: Boolean(r.has_more),
+          videos: (r.list || []).map((v) => ({
+            id: `dm-${v.id}`, titulo: v.title, resumen: v.description, miniatura: v.thumbnail_480_url,
+            url: v.url || `https://www.dailymotion.com/video/${v.id}`, fecha: v.created_time ? new Date(v.created_time * 1000).toISOString() : null,
+            vistas: v.views_total || undefined, duracion: v.duration || undefined, fuente: v['owner.screenname'] || 'Dailymotion',
+            idioma: v.language === 'en' ? 'en' : 'es',
+            embed: D.reproductorDailymotion ? `https://geo.dailymotion.com/player/${D.reproductorDailymotion}.html?video=${v.id}` : undefined,
+          })),
+        };
+      },
+    },
+    {
+      plataforma: 'archive',
+      nombre: 'Internet Archive',
+      tipo: 'video',
+      async leer(q, pagina) {
+        const p = new URLSearchParams({ q: `(${q.replace(/[():"\\]/g, ' ')}) AND mediatype:movies AND -collection:tvarchive AND -collection:tvnews`, rows: '50', page: String(pagina), output: 'json' });
+        for (const f of ['identifier', 'title', 'description', 'date', 'publicdate', 'downloads', 'language']) p.append('fl[]', f);
+        const r = await fetch(`https://archive.org/advancedsearch.php?${p}`).then((x) => x.json());
+        const uno = (v) => (Array.isArray(v) ? v.join(' ') : v || '');
+        return {
+          mas: pagina * 50 < (r.response?.numFound || 0),
+          videos: (r.response?.docs || []).map((d) => ({
+            id: `ia-${d.identifier}`, titulo: uno(d.title), resumen: uno(d.description), miniatura: `https://archive.org/services/img/${d.identifier}`,
+            url: `https://archive.org/details/${d.identifier}`, fecha: d.date || d.publicdate || null, vistas: d.downloads || undefined,
+            fuente: 'Internet Archive', idioma: /spa|esp/i.test(uno(d.language)) ? 'es' : 'en', embed: `https://archive.org/embed/${d.identifier}`,
+          })),
+        };
+      },
+    },
+  ];
+  // Temas de un recurso de afuera: los que tienen más palabras clave en su título y descripción.
+  let clavesDeTemas = null;
+  function temasDeTexto(texto) {
+    clavesDeTemas ??= CATS_VISIBLES.map((c) => ({ id: c.id, ps: (c.claves || []).map(norm).filter((k) => k.length >= 3).map(patronTermino) }));
+    return clavesDeTemas.map((c) => ({ id: c.id, n: c.ps.filter((p) => p.test(texto)).length }))
+      .filter((c) => c.n).sort((a, b) => b.n - a.n).slice(0, 2).map((c) => c.id);
+  }
+  function prepararAfuera(v, plataforma) {
+    const titulo = textoPlano(v.titulo).slice(0, 200);
+    const resumen = textoPlano(v.resumen).slice(0, 300);
+    const i = {
+      tipo: 'video', fuenteId: `afuera-${plataforma}`, ...v, titulo, resumen, sectores: [], hashtags: [], afuera: true,
+      _dom: dominio(v.url), _fecha: Date.parse(v.fecha) || 0, _tit: norm(titulo), _tags: '', _txt: norm(`${resumen} · ${v.fuente}`),
+    };
+    const temas = temasDeTexto(`${i._tit} ${i._txt}`);
+    i.categorias = temas.length ? temas : CATS.has('seguridad-general') ? ['seguridad-general'] : [];
+    if (!i.id) i.id = `w-${i.url}`;
+    i.fecha = new Date(i._fecha || ahora()).toISOString();
+    i._rec = puntaje(i);
+    return i;
+  }
+  const URLS_BIBLIOTECA = new Set(ITEMS.map((i) => i.url));
+  function sirveAfuera(i, b) {
+    if (!i.titulo || POR_ID.has(i.id) || URLS_BIBLIOTECA.has(i.url) || EXCLUIR_AFUERA.test(i._tit)) return false;
+    if (estado.idioma !== 'todos' && i.idioma !== estado.idioma) return false;
+    if (i.tipo === 'articulo') return Boolean(puntuar(i, b)?.completo) && CONTEXTO_SST.test(`${i._tit} ${i._txt}`); // lo buscado, en el título o el resumen
+    const r = puntuar(i, b);
+    if (!r?.completo) return false;
+    const enTitulo = b.terminos.some((t) => t.p.test(i._tit) || t.alt.some((p) => p.test(i._tit))) || b.altFrase.some((p) => p.test(i._tit));
+    if (!enTitulo || PARECE_NOTICIERO.test(norm(i.fuente))) return false;
+    // La palabra de contexto no puede ser la misma que se buscó ("seguridad" no basta para "seguridad").
+    const resto = b.resaltar.reduce((t, patron) => t.replace(patron, ' '), i._tit);
+    return CONTEXTO_TITULO.test(resto);
+  }
+
+  let afuera = null; // { clave, pagina, agotadas, cargando, vacias, inicio, items }
+  const claveAfuera = () => `${estado.q}|${estado.idioma}|${estado.plat}|${estado.tipo}`;
+  const plataformasAfuera = () => PLATAFORMAS_AFUERA.filter((f) => (estado.plat === 'todas' || estado.plat === f.plataforma)
+    && (estado.tipo === 'todo' || estado.tipo === f.tipo) && (f.plataforma !== 'web' || BLOGS_WP.length));
+  const puedeBuscarAfuera = () => estado.vista === 'inicio' && Boolean(estado.q.trim()) && Boolean(busqueda?.b)
+    && ['todo', 'video', 'articulo'].includes(estado.tipo) && plataformasAfuera().length > 0
+    && estado.fuente === 'todas' && estado.sector === 'todos' && !estado.tags && !estado.nuevos;
+  const nombresAfuera = () => plataformasAfuera().map((f) => f.nombre).join(', ').replace(/, ([^,]*)$/, ' y $1');
+  const separadorAfuera = () => `<div class="separador-afuera"><span>${svg('globo')} Más resultados en ${nombresAfuera()}</span>
+    <small>Encontrados ahora mismo en sus buscadores; no forman parte de la biblioteca de SST Hub.</small></div>`;
+
+  function avisoAfuera(tipo) {
+    let caja = $('#afueraEstado');
+    if (!caja) {
+      caja = document.createElement('p');
+      caja.id = 'afueraEstado';
+      caja.className = 'afuera-estado';
+      caja.setAttribute('aria-live', 'polite');
+      el.centinela.before(caja);
+    }
+    const nombres = nombresAfuera();
+    caja.hidden = !tipo;
+    caja.innerHTML = { cargando: `<span class="girando" aria-hidden="true"></span> Buscando más resultados en ${nombres}…`,
+      fin: 'No hay más resultados.', nada: `Tampoco encontramos más resultados de seguridad laboral en ${nombres}.` }[tipo] || '';
+  }
+
+  // Al volver a pintar la misma búsqueda (por ejemplo al regresar con "atrás"), se reponen los ya encontrados.
+  function reponerAfuera() {
+    if (!puedeBuscarAfuera() || afuera?.clave !== claveAfuera() || !afuera.items.length) return;
+    afuera.inicio = lista.length;
+    lista.push(...afuera.items);
+  }
+
+  async function buscarAfuera() {
+    if (!puedeBuscarAfuera() || mostrados < lista.length) return;
+    const clave = claveAfuera();
+    if (afuera?.clave !== clave) afuera = { clave, pagina: 0, agotadas: new Set(), cargando: false, vacias: 0, inicio: -1, items: [] };
+    const a = afuera;
+    if (a.cargando) return;
+    const fuentes = plataformasAfuera().filter((f) => !a.agotadas.has(f.plataforma));
+    if (!fuentes.length || a.vacias >= 4) { avisoAfuera(a.items.length ? 'fin' : 'nada'); return; }
+    a.cargando = true;
+    a.pagina++;
+    avisoAfuera('cargando');
+    const b = busqueda.b;
+    const q = busqueda.correccion || estado.q.replace(/^#/, '');
+    const lotes = await Promise.all(fuentes.map((f) => f.leer(q, a.pagina, b, a).catch(() => ({ mas: false, videos: [] }))));
+    a.cargando = false;
+    if (afuera !== a || claveAfuera() !== clave || !puedeBuscarAfuera()) return; // la búsqueda cambió mientras tanto
+    const grupos = lotes.map((l, k) => {
+      if (!l.mas) a.agotadas.add(fuentes[k].plataforma);
+      return l.videos.map((v) => prepararAfuera(v, fuentes[k].plataforma)).filter((i) => sirveAfuera(i, b));
+    });
+    const puntos = new Map(grupos.flat().map((i) => [i, puntuar(i, b)?.puntos ?? i._rec * 0.12]));
+    const mejor = (g) => g.sort((x, y) => puntos.get(y) - puntos.get(x));
+    const nuevos = porTurnos(grupos.map((g) => porTurnos(agruparPor(g, (i) => i.fuenteId).map(mejor), (i) => puntos.get(i))), (i) => puntos.get(i))
+      .filter((i, k, xs) => xs.findIndex((x) => x.id === i.id) === k);
+    a.vacias = nuevos.length ? 0 : a.vacias + 1;
+    avisoAfuera('');
+    if (nuevos.length) {
+      for (const i of nuevos) POR_ID.set(i.id, i); // para poder verlos dentro del portal en esta visita
+      if (a.inicio < 0) a.inicio = lista.length;
+      a.items.push(...nuevos);
+      lista.push(...nuevos);
+      el.vacio.hidden = true;
+      pintarResultado();
+      pintarMas();
+    } else {
+      requestAnimationFrame(() => { if (el.centinela.getBoundingClientRect().top < innerHeight + 900) buscarAfuera(); });
+    }
+  }
+
   function pintarResultado() {
-    if (!lista.length) { el.resultado.innerHTML = ''; return; }
+    if (!lista.length && !filtrosActivos().length) { el.resultado.innerHTML = ''; return; }
     const nombres = { categoria: CATS, sector: SECTORES };
     const donde = nombres[estado.vista] ? ` en ${esc(nombres[estado.vista].get(estado.id).nombre)}` : '';
-    const sector = estado.sector !== 'todos' && SECTORES.has(estado.sector) ? ` · sector ${esc(SECTORES.get(estado.sector).nombre)}` : '';
     const tags = tagsElegidos().map((h) => `#${esc(HASHTAGS.get(h).etiqueta)}`).join(' + ');
-    const plat = estado.plat !== 'todas' ? NOMBRES_PLAT.find(([k]) => k === estado.plat) : null;
-    el.resultado.innerHTML = `<b>${plural(lista.length, 'recurso', 'recursos')}</b>${donde}${sector}${plat ? ` · en ${plat[1]}` : ''}${tags ? ` · ${tags}` : ''}${estado.nuevos ? ' · solo nuevos' : ''}` +
-      (hayFiltros() ? `<button type="button" class="limpiar" data-accion="limpiar">Quitar filtros</button>` : '');
+    const deAfuera = afuera?.clave === claveAfuera() && afuera.inicio >= 0 ? lista.length - afuera.inicio : 0;
+    const activos = filtrosActivos();
+    el.resultado.innerHTML = `<span class="resultado-n"><b>${plural(lista.length - deAfuera, 'recurso', 'recursos')}</b>${deAfuera ? ` + ${nf.format(deAfuera)} de otras plataformas` : ''}${donde}${tags ? ` · ${tags}` : ''}</span>`
+      + (activos.length ? `<span class="filtros-activos">${activos.map(chipQuitar).join('')}</span>` : '')
+      + (activos.length > 1 || (activos.length && tags) ? `<button type="button" class="limpiar" data-accion="limpiar">Quitar todos</button>` : '');
   }
 
   function pintarVacio() {
@@ -1437,6 +1726,22 @@
       icono = '🕘'; titulo = 'Todavía no abres ningún recurso';
       texto = 'Cuando abras un video o un artículo desde aquí, aparecerá en esta lista.';
       acciones = `<a class="boton" href="#/">Explorar recursos</a>`;
+    } else if (filtrosActivos().some(([k]) => k !== 'q') || tagsElegidos().length) {
+      // Con filtros: cuántos resultados habría quitando cada uno
+      const opciones = filtrosActivos().filter(([k]) => k !== 'q').map((f) => {
+        const [clave] = f;
+        const n = clave === 'tipo' ? filtrar(ambito).length : clave === 'nuevos' ? null : conTipo(filtrar(ambito, clave)).length;
+        return { f, n };
+      }).filter((x) => x.n);
+      if (tagsElegidos().length) {
+        const n = conTipo(filtrar(ambito, 'tags')).length;
+        if (n) opciones.push({ f: ['tags', '', 'los hashtags'], n });
+      }
+      opciones.sort((a, b) => b.n - a.n);
+      titulo = 'Ningún recurso cumple todos los filtros a la vez';
+      texto = opciones.length ? 'Quita uno y verás resultados:' : 'Prueba quitando los filtros.';
+      acciones = opciones.map(({ f: [clave, valor, nombre], n }) => `<button type="button" class="boton boton-sec" data-filtro="${clave}" data-valor="${valor}">Quitar «${nombre}» → ${plural(n, 'resultado', 'resultados')}</button>`).join(' ')
+        + ` <button type="button" class="boton" data-accion="limpiar">Quitar todos los filtros</button>`;
     } else if (estado.q) {
       titulo = `Sin resultados para “${esc(estado.q)}”`;
       texto = 'Revisa la ortografía o usa una palabra más general, como “altura”, “EPP” o “incendio”.';
@@ -1462,7 +1767,7 @@
     mostrados = 0;
 
     const conGrilla = VISTAS_CON_GRILLA.has(estado.vista);
-    el.herramientas.hidden = el.resultado.hidden = el.grilla.hidden = el.barraHashtags.hidden = !conGrilla;
+    el.herramientas.hidden = el.resultado.hidden = el.grilla.hidden = el.barraHashtags.hidden = el.barraPlat.hidden = !conGrilla;
 
     if (!conGrilla) {
       const pintores = { explorar: pintarExplorar, listas: pintarListas, lista: pintarDetalleLista, ver: () => pintarReproductor(false) };
@@ -1474,6 +1779,9 @@
     }
 
     const base = alcance();
+    facetas = contarFacetas();
+    pintarSelects();
+    pintarBarraPlat();
     pintarCabecera();
     pintarSeccionesInicio();
     el.herramientas.hidden = !base.length && !hayFiltros();
@@ -1481,6 +1789,8 @@
     pintarBarraHashtags(base);
     sincronizarControles();
     lista = ordenar(estado.tipo === 'todo' ? base : base.filter((i) => i.tipo === estado.tipo));
+    avisoAfuera('');
+    reponerAfuera();
     pintarMas();
     pintarResultado();
     if (!lista.length) pintarVacio();
@@ -1642,13 +1952,18 @@
 
   function hojaFiltros() {
     const fila = (titulo, clave, opciones) => `<div class="filtro"><p class="filtro-titulo">${titulo}</p><div class="filtro-ops">${opciones.map(([valor, texto]) =>
-      `<button type="button" class="chip-opcion" data-filtro="${clave}" data-valor="${esc(valor)}" aria-pressed="${String(estado[clave] === valor || (clave === 'vista' && modoVista === valor))}">${texto}</button>`).join('')}</div></div>`;
+      `<button type="button" class="chip-opcion" data-filtro="${clave}" data-valor="${esc(valor)}" aria-pressed="${String(estado[clave] === valor || (clave === 'vista' && modoVista === valor))}"${conteoOpcion(clave, valor) === 0 && estado[clave] !== valor ? ' disabled' : ''}>${texto}${conteoOpcion(clave, valor) == null ? '' : ` <small>${nf.format(conteoOpcion(clave, valor))}</small>`}</button>`).join('')}</div></div>`;
+    const conteoOpcion = (clave, valor) => {
+      if (!facetas || !['sector', 'idioma', 'plat'].includes(clave)) return null;
+      if (valor === 'todos' || valor === 'todas') return facetas[{ sector: 'totalSector', idioma: 'totalIdioma', plat: 'totalPlat' }[clave]];
+      return facetas[clave].get(valor) ?? 0;
+    };
     const pintar = () => [
       estado.vista !== 'sector' && SECTORES_VISIBLES.length ? fila('Sector', 'sector', [['todos', 'Todos'], ...SECTORES_VISIBLES.map((s) => [s.id, `${s.icono} ${esc(s.nombre)}`])]) : '',
       fila('Ordenar por', 'orden', [['recomendados', 'Recomendados'], ['recientes', 'Más recientes'], ['vistas', 'Más vistos'], ['antiguos', 'Más antiguos'], ['az', 'A–Z']]),
       `<div class="filtro"><p class="filtro-titulo">Recomendaciones para</p><div class="filtro-ops"><button type="button" class="chip-opcion" data-accion="elegir-pais" aria-pressed="true">${esc(nombrePais(miPais))} · cambiar</button></div></div>`,
-      new Set(ITEMS.map((i) => i.idioma)).size > 1 ? fila('Idioma', 'idioma', [['todos', 'Todos'], ['es', 'Español'], ['en', 'Inglés']]) : '',
       opcionesPlataforma().length > 1 ? fila('Plataforma', 'plat', [['todas', 'Todas'], ...opcionesPlataforma().map(([k, nombre]) => [k, nombre])]) : '',
+      new Set(ITEMS.map((i) => i.idioma)).size > 1 ? fila('Idioma', 'idioma', [['todos', 'Todos'], ['es', 'Español'], ['en', 'Inglés']]) : '',
       refVisita ? fila('Novedades', 'nuevos', [['', 'Todo'], ['1', `Solo nuevos (${cuantosNuevos()})`]]) : '',
       fila('Ver como', 'vista', [['grilla', 'Cuadrícula'], ['lista', 'Lista']]),
       estado.vista !== 'fuente' ? `<div class="filtro"><p class="filtro-titulo">Fuente</p><label class="select select-ancho"><select data-filtro-select="fuente">${el.selFuente.innerHTML}</select>${svg('abajo')}</label></div>` : '',
@@ -1890,6 +2205,7 @@
     const filtro = t.closest('[data-filtro]');
     if (filtro) {
       if (filtro.dataset.filtro === 'vista') cambiarVista(filtro.dataset.valor);
+      else if (filtro.dataset.filtro === 'q') { el.q.value = ''; actualizarFiltros({ q: '' }); }
       else actualizarFiltros({ [filtro.dataset.filtro]: filtro.dataset.valor });
       el.hojaCuerpo._repintar?.();
       return;
@@ -1985,10 +2301,24 @@
   // =====================================================================
   let opcionActiva = -1;
 
+  const BUSQUEDAS_FRECUENTES = ['IPERC', 'trabajo en altura', 'espacios confinados', 'LOTO', 'ICAM', 'extintores', 'EPP', 'ATS', 'izaje', 'primeros auxilios', 'ISO 45001', 'charla de 5 minutos'];
+  let busquedasRecientes = almacen.leer('busquedas', []);
+  function recordarBusqueda(q) {
+    if (!q || q.length < 2) return;
+    busquedasRecientes = [q, ...busquedasRecientes.filter((x) => norm(x) !== norm(q))].slice(0, 6);
+    almacen.guardar('busquedas', busquedasRecientes);
+  }
   function sugerencias(texto) {
     const q = norm(texto).trim();
     const esHashtag = q.startsWith('#');
     const t = q.replace(/^#/, '');
+    if (!t && !esHashtag) {
+      const op = (x, ico) => ({ href: `#/?q=${encodeURIComponent(x)}`, html: `<span class="sug-ico sug-hash">${ico}</span><span>${esc(x)}</span>` });
+      return [
+        busquedasRecientes.length ? ['Tus búsquedas recientes', busquedasRecientes.map((x) => op(x, '↺'))] : null,
+        ['Lo más buscado en SST', BUSQUEDAS_FRECUENTES.filter((x) => !busquedasRecientes.some((r) => norm(r) === norm(x))).slice(0, 8).map((x) => op(x, '🔎'))],
+      ].filter(Boolean);
+    }
     if (t.length < 2) return [];
     const compacto = t.replace(/[^a-z0-9]/g, '');
     const grupos = [];
@@ -2019,7 +2349,7 @@
     let n = 0;
     el.sugerencias.innerHTML = grupos.map(([titulo, ops]) => `<div class="sug-grupo"><p>${titulo}</p>${ops.map((o) =>
       `<a class="sug-op" role="option" id="sug-${n++}" href="${esc(o.href)}"${o.salida ? ` target="_blank" rel="noopener noreferrer" data-salida="${o.salida}"` : ''}>${o.html}</a>`).join('')}</div>`).join('') +
-      `<button type="button" class="sug-buscar" data-buscar-todo>${svg('flecha')} Buscar «${esc(texto.trim())}» en todo</button>`;
+      (texto.trim() ? `<button type="button" class="sug-buscar" data-buscar-todo>${svg('flecha')} Buscar «${esc(texto.trim())}» en todo</button>` : '');
     el.sugerencias.hidden = false;
     el.q.setAttribute('aria-expanded', 'true');
   }
@@ -2042,6 +2372,7 @@
 
   function buscar(q) {
     cerrarSugerencias();
+    recordarBusqueda(q);
     if (q === estado.q && VISTAS_CON_GRILLA.has(estado.vista)) return;
     if (!VISTAS_CON_GRILLA.has(estado.vista) || estado.vista === 'guardados' || estado.vista === 'vistos') {
       location.hash = hashDe({ ...estado, ...FILTROS_BASE, vista: 'inicio', id: null, q });
@@ -2056,7 +2387,7 @@
     relojSugerencias = setTimeout(pintarSugerencias, 120);
     if (!el.q.value.trim() && estado.q) buscar('');
   });
-  el.q.addEventListener('focus', () => { if (el.q.value.trim().length >= 2) pintarSugerencias(); });
+  el.q.addEventListener('focus', () => { if (el.q.value.trim().length >= 2 || !el.q.value.trim()) pintarSugerencias(); });
   el.q.addEventListener('blur', () => setTimeout(cerrarSugerencias, 180));
   el.q.addEventListener('keydown', (e) => {
     if (el.sugerencias.hidden) return;
@@ -2067,7 +2398,13 @@
   el.sugerencias.addEventListener('mousedown', (e) => e.preventDefault()); // que el clic no cierre antes por el blur
   el.sugerencias.addEventListener('click', (e) => {
     if (e.target.closest('[data-buscar-todo]')) { buscar(el.q.value.trim()); return; }
-    if (e.target.closest('.sug-op')) { cerrarSugerencias(); el.q.blur(); }
+    const op = e.target.closest('.sug-op');
+    if (op) {
+      const q = new URLSearchParams(op.getAttribute('href').split('?')[1] || '').get('q');
+      if (q) recordarBusqueda(q);
+      cerrarSugerencias();
+      el.q.blur();
+    }
   });
   $('#formBuscar').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -2177,7 +2514,9 @@
   });
 
   new IntersectionObserver((entradas) => {
-    if (entradas.some((x) => x.isIntersecting) && mostrados < lista.length) pintarMas();
+    if (!entradas.some((x) => x.isIntersecting)) return;
+    if (mostrados < lista.length) pintarMas();
+    else buscarAfuera();
   }, { rootMargin: '900px 0px' }).observe(el.centinela);
 
   // Guardados o listas cambiados en otra pestaña se sincronizan.

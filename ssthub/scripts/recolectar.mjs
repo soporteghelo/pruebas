@@ -12,7 +12,7 @@ import {
 } from './lib/util.mjs';
 import {
   leerFeed, urlFeedYoutube, canalDe, listarPlaylist, listasDeCanal, playlistDeSubidas, idYoutube, miniaturaYoutube,
-  oembedYoutube, buscarYoutube, detallesYoutube, leerMetaPagina, idVimeo, videosVimeo, videosDailymotion, videosArchive,
+  oembedYoutube, buscarYoutube, detallesYoutube, leerMetaPagina, idVimeo, videosVimeo, videosDailymotion, videosArchive, baseWordpress, articulosWordpress,
 } from './lib/lectores.mjs';
 import { crearClasificador } from './lib/clasificador.mjs';
 import { crearEtiquetador, extraerHashtags, idHashtag } from './lib/hashtags.mjs';
@@ -22,6 +22,7 @@ const R = (p) => path.join(RAIZ, p);
 const RUTA_BIBLIOTECA = R('data/biblioteca.json');
 const RUTA_SALIDA = R('public/data/contenido.js');
 const RUTA_CACHE_LISTAS = R('data/listas-canales.json');
+const RUTA_WORDPRESS = R('data/wordpress.json'); // blogs con la API de WordPress abierta (la web busca en ellos en vivo)
 
 const esPdf = (u) => /\.pdf(\?|#|$)/i.test(u);
 const pareceMiniaturaChica = (u) => /-\d{2,3}x\d{2,3}\.(jpe?g|png|webp)/i.test(u || '');
@@ -179,6 +180,7 @@ async function main() {
     leerJson(RUTA_BIBLIOTECA, { items: [] }),
   ]);
   const cacheListas = await leerJson(RUTA_CACHE_LISTAS, {});
+  const wordpress = await leerJson(RUTA_WORDPRESS, {});
   const opc = { filtrarTodo: true, maxItems: 5000, maxPorFuente: 60, maxPorCanalConClave: 150, listasPorCanal: 10, diasCacheListas: 7, concurrencia: 6, buscarImagenEnPagina: true, ...cfgFuentes.opciones };
   reproductorDailymotion = String(opc.reproductorDailymotion || '').trim() || null;
   const clasificador = crearClasificador(cfgCategorias);
@@ -270,6 +272,14 @@ async function main() {
       const entradas = leerFeed(await obtener(url)).filter((e) => e.url && e.titulo).slice(0, opc.maxPorFuente);
       entradas.forEach((e) => incorporar(desdeEntrada(e, f)));
       leidos += entradas.length;
+      if (f.tipo === 'rss' && f.wordpress !== false) {
+        try {
+          const posts = await articulosWordpress(baseWordpress(f.url), { limite: opc.maxPorFuente });
+          posts.filter((e) => e.url && e.titulo).forEach((e) => incorporar(desdeEntrada(e, f)));
+          leidos = Math.max(leidos, posts.length);
+          wordpress[f.id] = baseWordpress(f.url);
+        } catch { delete wordpress[f.id]; } // no es WordPress o cerró su API: queda solo el RSS
+      }
       if (claveYT && f.tipo === 'youtube') {
         const playlist = f.playlist || playlistDeSubidas(await canalDe(f));
         const videos = await listarPlaylist(playlist, opc.maxPorCanalConClave, claveYT);
@@ -483,6 +493,7 @@ async function main() {
   await fs.mkdir(path.dirname(RUTA_BIBLIOTECA), { recursive: true });
   await escribirJson(RUTA_BIBLIOTECA, { actualizado: ahora, total: recorteBiblioteca.length, items: recorteBiblioteca }, true);
   await escribirJson(RUTA_CACHE_LISTAS, cacheListas, true);
+  await escribirJson(RUTA_WORDPRESS, wordpress);
 
   const agrupar = (clave, ids) => {
     const m = new Map(ids.map((id) => [id, []]));
@@ -522,8 +533,10 @@ async function main() {
       .sort((a, b) => b[1] - a[1])
       .map(([id, total]) => ({ id, etiqueta: etiquetador.etiquetaCurada(id) ?? originalesValidos.get(id) ?? id, total })),
     listas,
+    excluir: cfgCategorias.excluirGlobal ?? [], // la web también las usa al buscar en vivo en otras plataformas
+    reproductorDailymotion: reproductorDailymotion ?? undefined,
     fuentes: [
-      ...fuentes.map((f) => ({ id: f.id, nombre: f.nombre, tipo: f.tipo, idioma: f.idioma || 'es', pais: f.pais ?? null })),
+      ...fuentes.map((f) => ({ id: f.id, nombre: f.nombre, tipo: f.tipo, idioma: f.idioma || 'es', pais: f.pais ?? null, wp: wordpress[f.id] })),
       { id: 'youtube', nombre: 'Otros canales de YouTube', tipo: 'youtube', idioma: 'es' },
       { id: 'manual', nombre: 'Recomendados', tipo: 'manual', idioma: 'es' },
     ].map((f) => ({ ...f, total: porFuente.get(f.id) ?? 0 })).filter((f) => f.total),

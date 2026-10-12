@@ -941,3 +941,37 @@ svg.relleno { fill: currentColor; stroke: none; }
   .flotante.minimizado { width: 200px; }
   body.con-mini .aviso { bottom: calc(230px + env(safe-area-inset-bottom)); }
 }
+
+/* ---------- Más resultados en otras plataformas ---------- */
+.separador-afuera { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; padding: 18px 0 6px; border-top: 1px solid var(--borde); }
+.separador-afuera span { display: flex; align-items: center; gap: 8px; font-family: var(--fuente-titulo); font-size: 20px; font-weight: 700; color: var(--texto); }
+.separador-afuera svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; }
+.separador-afuera small { font-size: 13px; color: var(--texto-3); }
+.afuera-estado { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 26px 0 8px; font-size: 14px; color: var(--texto-3); }
+.girando { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid var(--borde); border-top-color: var(--acento); animation: girar .8s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+
+/* ---------- Filtros amigables ---------- */
+.plat-pill { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 34px; padding: 6px 13px; border: 1px solid var(--borde); border-radius: 999px; background: var(--superficie); color: var(--texto); font: 600 13.5px var(--fuente); cursor: pointer; }
+.plat-pill span { color: var(--texto-3); font-weight: 600; font-size: 12px; }
+.plat-pill:hover:not(:disabled) { border-color: var(--texto-3); }
+.plat-pill.activo { background: var(--texto); border-color: var(--texto); color: var(--fondo); }
+.plat-pill.activo span { color: inherit; opacity: .75; }
+.plat-pill:disabled, .chip-opcion:disabled { opacity: .4; cursor: not-allowed; }
+.chip-opcion small { color: var(--texto-3); font-weight: 600; margin-left: 4px; }
+.resultado { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.filtros-activos { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.filtro-activo { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 10px; border: 0; border-radius: 999px; background: var(--acento); color: var(--acento-tinta); font: 600 12.5px var(--fuente); cursor: pointer; }
+.filtro-activo svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; }
+.filtro-activo:hover { filter: brightness(.95); }
+.resultado .limpiar { margin-left: 0; }
+.relacionadas-busqueda .chip small { margin-left: 6px; color: var(--texto-3); font-weight: 600; }
+.vacio .boton { margin: 4px; }
+select option:disabled { color: #9AA0A8; }
+@media (max-width: 700px) {
+  /* En el celular, los temas para afinar van en una fila deslizable (no empujan los resultados hacia abajo) */
+  .relacionadas-busqueda { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: -16px; padding-right: 16px; }
+  .relacionadas-busqueda::-webkit-scrollbar { display: none; }
+  .relacionadas-busqueda > * { flex: none; }
+  .cab-simple p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+}

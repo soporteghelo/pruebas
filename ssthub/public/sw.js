@@ -1,6 +1,6 @@
 // Service worker de SST Hub: permite instalar el portal como app y abrirlo sin conexión.
 // Siempre intenta la red primero (para ver lo último) y usa la copia guardada si no hay internet.
-const CACHE = 'ssthub-v4';
+const CACHE = 'ssthub-v5';
 const BASICO = ['./', 'index.html', 'css/estilos.css', 'js/app.js', 'data/contenido.js', 'favicon.svg', 'manifest.webmanifest', 'iconos/icono-192.png', 'iconos/icono-512.png'];
 
 self.addEventListener('install', (e) => {

@@ -1,6 +1,6 @@
 # SST Hub — Portal de seguridad laboral
 
-Galería de miniaturas que reúne **8000 videos, artículos y guías** de seguridad y salud en el trabajo de **313 fuentes**: 225 canales de YouTube, 11 cuentas de Vimeo, 13 de Dailymotion, filmes de capacitación de Internet Archive y 61 blogs y revistas de Perú, Latinoamérica, España y el mundo. Los **clasifica por tema, sector y hashtag** y, al hacer clic, **los reproduce dentro del portal o te lleva a la página original**. Además permite **armar listas para charlas** y verlas seguidas o compartirlas por WhatsApp. Funciona en computadora y como **app instalable en el celular**.
+Galería de miniaturas que reúne **8000 videos, artículos y guías** de seguridad y salud en el trabajo de **316 fuentes**: 225 canales de YouTube, 11 cuentas de Vimeo, 13 de Dailymotion, filmes de capacitación de Internet Archive y 64 blogs y revistas de Perú, Latinoamérica, España y el mundo. Los **clasifica por tema, sector y hashtag** y, al hacer clic, **los reproduce dentro del portal o te lleva a la página original**. Además permite **armar listas para charlas** y verlas seguidas o compartirlas por WhatsApp. Funciona en computadora y como **app instalable en el celular**.
 
 | Escritorio | Reproductor de listas | Celular |
 |---|---|---|
@@ -22,7 +22,12 @@ Galería de miniaturas que reúne **8000 videos, artículos y guías** de seguri
 - **Hashtags automáticos** (#ICAM, #IPERC, #PETAR, #LOTO, #ControlesCríticos, #SaludMental…) más los que usan las propias fuentes (#SST, #SeguridadMinera).
 - **Buscador preciso**: busca en título, descripción, hashtags y fuente. “IPERC” trae lo que menciona IPERC, no todo un tema; las siglas cortas (ATS, EPP, RCP, 5S) deben coincidir completas. Entiende sin tildes y en plural (“arneses” encuentra “arnés”). Si no hay coincidencias exactas, lo dice y ofrece el tema relacionado. Escribe `#` para buscar solo hashtags.
 - **Recomendados para tu país, como YouTube**: primero lo que más se ve en tu país (se detecta solo y se puede cambiar), luego lo popular y reciente del resto, sin repetir la misma fuente seguida. Al bajar con el scroll van apareciendo más.
-- **Resultados parejos entre fuentes**: en las búsquedas, los temas y los recomendados se toma por turnos lo mejor de cada fuente. Si “IPERC” encuentra 120 resultados de 42 fuentes, los primeros 42 son uno de cada fuente; recién después se repiten las que tienen más.
+- **Resultados parejos entre plataformas y fuentes**: en el inicio, las búsquedas y los temas se toma por turnos lo mejor de cada plataforma (YouTube → webs y blogs → Vimeo → Dailymotion → Internet Archive → YouTube…) y, dentro de cada plataforma, de cada fuente. Cuando una plataforma se queda sin recursos, siguen las demás.
+- **Al bajar, sigue buscando**: cuando se acaban los resultados de una búsqueda, el portal busca en vivo en los **blogs de SST** (los ~50 que usan WordPress, con todo lo que publicaron, no solo lo último), en **Dailymotion** y en **Internet Archive**, y los muestra debajo de “Más resultados en…”. Solo entra lo que habla de seguridad laboral: en los videos, el título debe tener lo buscado y otra palabra de seguridad o de formación (“uso de”, “tipos”, “curso”, “NFPA”…); se descartan noticieros, películas, deportes y música.
+- **Filtros que no te dejan en blanco**: cada opción muestra cuántos resultados da con el resto de los filtros (“YouTube 247 · Webs y blogs 46 · Vimeo 2”) y las que dejarían la página vacía aparecen desactivadas. Los filtros activos se ven como etiquetas con ✕ para quitarlos de un toque. Si igual no hay resultados, la página dice qué filtro estorba: “Quitar «Internet Archive» → 486 resultados”.
+- **Pestañas “Ver en”**: Todas · YouTube · Webs y blogs · Vimeo · Dailymotion · Internet Archive, con su cantidad, sobre los resultados.
+- **Afinar por tema** en cada búsqueda: los temas donde más aparece lo buscado, con su cantidad (“Prevención de incendios 149 · Charlas 68…”), para buscar solo dentro de uno.
+- **Búsquedas frecuentes y recientes**: al tocar el buscador vacío aparecen lo más buscado en SST (IPERC, trabajo en altura, LOTO, ICAM…) y tus últimas búsquedas.
 - Filtros por tipo (video, artículo, PDF), sector, idioma, **plataforma** (YouTube, Vimeo, Dailymotion, Internet Archive, webs y blogs), fuente y orden (recomendados, recientes, **más vistos**…), en **cuadrícula o lista**.
 - **Vista previa animada** al pasar el mouse sobre un video, como en los sitios de videos.
 - Etiqueta **“Nuevo”** y aviso de “X recursos nuevos desde tu última visita”.
@@ -68,6 +73,8 @@ Galería de miniaturas que reúne **8000 videos, artículos y guías** de seguri
 ```
 
 **Cómo se llega a miles de videos sin clave:** el RSS de un canal solo trae sus últimos 15 videos, pero cada lista de reproducción del canal tiene su propio RSS con otros 15. El recolector lee primero las listas cuyo título habla de seguridad (se revisan cada 7 días, `data/listas-canales.json`). Además quita de las descripciones el texto que un canal repite en todos sus videos (“Suscríbete a nuestro canal de Seguridad y Salud…”) para que solo pase lo que de verdad trata de seguridad.
+
+**Blogs WordPress:** además del RSS (que solo trae los 10 últimos artículos), el recolector lee hasta 60 artículos por blog con la API pública de WordPress (`/wp-json/wp/v2/posts`) y guarda en `data/wordpress.json` qué blogs la tienen abierta; la web usa esa lista para buscar en vivo. Para que una fuente no use la API: `"wordpress": false`.
 
 **Cupo parejo:** si hay más recursos que el tope (`opciones.maxItems`, hoy 8000), cada fuente aporta por turnos lo más nuevo que tiene. Así un canal que sube mucho no deja afuera a las fuentes chicas ni a los filmes antiguos.
 

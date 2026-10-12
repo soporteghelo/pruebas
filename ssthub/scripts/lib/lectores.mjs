@@ -332,3 +332,22 @@ export async function videosArchive({ busqueda, limite = 100 }) {
     vistas: d.downloads || undefined,
   }));
 }
+
+// WordPress: la mayoría de los blogs de SST publican su API (wp-json). Da más artículos que el RSS (que solo
+// trae los últimos 10) y permite buscar en todo lo que el blog publicó.
+export const baseWordpress = (url) => `${new URL(url).origin}/wp-json/wp/v2/`;
+const CAMPOS_WP = 'id,date_gmt,link,title,excerpt,jetpack_featured_media_url,yoast_head_json.og_image';
+const sinEtiquetas = (html = '') => decodificar(String(html).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+export async function articulosWordpress(base, { limite = 50, busqueda } = {}) {
+  const p = new URLSearchParams({ per_page: String(Math.min(limite, 100)), _fields: CAMPOS_WP });
+  if (busqueda) p.set('search', busqueda);
+  const posts = await obtener(`${base}posts?${p}`, { json: true });
+  if (!Array.isArray(posts)) throw new Error('no responde como WordPress');
+  return posts.map((x) => ({
+    titulo: sinEtiquetas(x.title?.rendered),
+    url: x.link,
+    fecha: x.date_gmt ? `${x.date_gmt}Z` : null,
+    resumenHtml: x.excerpt?.rendered || '',
+    imagen: x.jetpack_featured_media_url || x.yoast_head_json?.og_image?.[0]?.url || null,
+  }));
+}
