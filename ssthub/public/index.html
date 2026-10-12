@@ -104,6 +104,7 @@
           </div>
         </div>
       </div>
+      <div class="barra-hashtags" id="barraHashtags" role="group" aria-label="Filtrar por hashtag"></div>
       <p class="resultado" id="resultado" aria-live="polite"></p>
 
       <div class="grilla" id="grilla"></div>
@@ -121,6 +122,18 @@
     <a href="#/guardados" data-ruta="guardados"><svg viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg><span>Guardados</span><span class="burbuja" data-burbuja="guardados" hidden></span></a>
     <button type="button" id="btnMas" aria-controls="lateral" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Más</span></button>
   </nav>
+
+  <!-- Un solo reproductor para toda la app: se ve grande en la página del video y pasa a "mini" al seguir navegando. -->
+  <div class="flotante" id="flotante" hidden>
+    <div class="flotante-video" id="flotanteVideo"><div id="repVideo"></div></div>
+    <div class="flotante-barra">
+      <button type="button" class="flotante-info" data-flotante="ampliar" title="Volver al video"><b id="flotanteTitulo"></b><small id="flotanteLista"></small></button>
+      <button type="button" class="icono-btn" data-flotante="pausa" id="flotantePausa" aria-label="Pausar"><svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg></button>
+      <button type="button" class="icono-btn" data-flotante="siguiente" aria-label="Siguiente"><svg viewBox="0 0 24 24"><path d="m5 4 10 8-10 8zM19 5v14"/></svg></button>
+      <button type="button" class="icono-btn" data-flotante="ampliar" aria-label="Ampliar"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+      <button type="button" class="icono-btn" data-flotante="cerrar" aria-label="Cerrar reproductor"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+  </div>
 
   <div class="hoja-velo" id="hojaVelo" hidden></div>
   <section class="hoja" id="hoja" role="dialog" aria-modal="true" aria-labelledby="hojaTitulo" hidden>

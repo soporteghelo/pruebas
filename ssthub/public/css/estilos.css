@@ -862,3 +862,67 @@ body.con-hoja, body.con-menu { overflow: hidden; }
 .enlace-boton { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0; border-radius: 999px; background: transparent; color: var(--texto-2); font: 600 13.5px var(--fuente); cursor: pointer; white-space: nowrap; }
 .enlace-boton:hover { background: var(--superficie-2); color: var(--texto); }
 .enlace-boton svg { width: 16px; height: 16px; }
+
+/* Íconos rellenos (play) dentro de botones y menús */
+svg.relleno { fill: currentColor; stroke: none; }
+
+/* =====================================================================
+   v4 — reproductor flotante, barra de hashtags, origen y buscador
+   ===================================================================== */
+.flotante { position: absolute; z-index: 25; overflow: hidden; border-radius: 16px; background: #000; box-shadow: var(--sombra-alta); }
+.flotante-video { position: relative; width: 100%; height: 100%; }
+.flotante-video iframe, .flotante-video > div { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.flotante-barra { display: none; }
+.flotante.minimizado {
+  position: fixed; z-index: 45; top: auto; left: auto; right: 16px; bottom: 16px;
+  display: flex; flex-direction: column; width: 360px; height: auto;
+  border-radius: 14px; background: var(--superficie); border: 1px solid var(--borde);
+  animation: aparecer-mini .25s ease;
+}
+.flotante.minimizado .flotante-video { height: auto; aspect-ratio: 16 / 9; background: #000; }
+.flotante.minimizado .flotante-barra { display: flex; align-items: center; gap: 2px; padding: 6px 6px 6px 12px; }
+.flotante-info { flex: 1; min-width: 0; padding: 2px 0; border: 0; background: transparent; color: var(--texto); font: inherit; text-align: left; cursor: pointer; }
+.flotante-info b { display: block; overflow: hidden; font: 600 13.5px/1.25 var(--fuente); white-space: nowrap; text-overflow: ellipsis; }
+.flotante-info small { display: block; overflow: hidden; font-size: 12px; color: var(--texto-3); white-space: nowrap; text-overflow: ellipsis; }
+.flotante-barra .icono-btn { width: 36px; height: 36px; }
+.flotante-barra .icono-btn svg { width: 18px; height: 18px; }
+@keyframes aparecer-mini { from { opacity: 0; transform: translateY(12px) scale(.96); } }
+.rep-pantalla { background: #000; }
+.rep-nota { margin: -4px 0 12px; font-size: 13px; color: var(--texto-3); }
+
+@media (max-width: 960px) {
+  .flotante.minimizado { right: 8px; bottom: calc(70px + env(safe-area-inset-bottom)); width: min(356px, calc(100vw - 16px)); }
+  .flotante:not(.minimizado) { border-radius: 0; }
+  body.con-mini .aviso { bottom: calc(330px + env(safe-area-inset-bottom)); }
+}
+
+/* Etiqueta de origen (plataforma o web) */
+.sello-origen { max-width: calc(100% - 56px); }
+.sello-origen .sello-txt { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sello .logo-yt { width: 15px; height: 15px; stroke: none; }
+.sello-youtube { background: #E62117; }
+.sello-vimeo { background: #1AB7EA; }
+.sello-dailymotion { background: #0066DC; }
+.sello-facebook { background: #1877F2; }
+.sello-tiktok { background: #111; }
+.sello-linkedin { background: #0A66C2; }
+.sellos { right: 50px; }
+
+/* Barra de hashtags para filtrar (como los chips de YouTube) */
+.barra-hashtags { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; padding: 2px 0 10px; overflow-x: auto; scrollbar-width: none; }
+.barra-hashtags::-webkit-scrollbar { display: none; }
+.barra-hashtags-titulo { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; font: 700 12px var(--fuente); letter-spacing: .06em; text-transform: uppercase; color: var(--texto-3); }
+.barra-hashtags-titulo svg { width: 15px; height: 15px; }
+.hashtag-filtro {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  min-height: 34px; padding: 6px 12px; border: 1px solid var(--borde); border-radius: 999px;
+  background: var(--superficie); color: var(--texto); font: 600 13px var(--fuente); white-space: nowrap; cursor: pointer;
+}
+.hashtag-filtro:hover { border-color: var(--texto-3); }
+.hashtag-filtro span { font-size: 12px; font-weight: 500; color: var(--texto-3); }
+.hashtag-filtro.activo { background: var(--texto); border-color: var(--texto); color: var(--fondo); }
+.hashtag-filtro svg { width: 14px; height: 14px; }
+@media (max-width: 560px) { .barra-hashtags { margin-right: -16px; padding-right: 16px; } }
+
+/* Palabras buscadas resaltadas en los títulos */
+.titulo mark { padding: 0 2px; border-radius: 3px; background: color-mix(in srgb, var(--acento) 45%, transparent); color: inherit; }

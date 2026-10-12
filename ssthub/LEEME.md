@@ -26,6 +26,18 @@ Galería de miniaturas que reúne **6000 videos, artículos y guías** de seguri
 - **Vista previa animada** al pasar el mouse sobre un video, como en los sitios de videos.
 - Etiqueta **“Nuevo”** y aviso de “X recursos nuevos desde tu última visita”.
 
+**Ver videos sin salir del portal (como YouTube)**
+- Al tocar un video **se reproduce dentro de SST Hub** con su información y una columna **“A continuación”** de videos relacionados (mismo tema, primero los de tu país) que avanza sola. Siempre queda el botón para abrirlo en YouTube; con Ctrl+clic o la rueda del mouse se abre directo allá. En el menú lateral se puede elegir abrir los videos en YouTube.
+- **Mini reproductor:** si sigues navegando, el video continúa en una ventanita abajo a la derecha (en el celular, sobre la barra inferior) con pausa, siguiente, ampliar y cerrar.
+- Al volver atrás regresas al mismo punto del scroll.
+- Cada tarjeta muestra **de dónde viene**: YouTube, YouTube Shorts, Vimeo… o el dominio de la web del artículo.
+
+**Filtrar por hashtags**: sobre los resultados aparece una barra con los hashtags más frecuentes y su cantidad; cada uno que tocas afina más (por ejemplo #Incendios + #Extintores).
+
+**Buscador afinado**: puntúa por relevancia (título > hashtags > descripción; la frase exacta suma), entiende sinónimos y siglas de SST en español e inglés (LOTO = bloqueo y etiquetado, extintor = fire extinguisher, RCP = CPR…), corrige errores de tipeo (“estintor” → “extintor”), resalta las palabras encontradas y, si ninguna coincide del todo, avisa y muestra lo más cercano.
+
+**Solo seguridad laboral**: todas las fuentes pasan por el mismo filtro (la palabra de seguridad debe estar en el título o la lista de reproducción, o dos veces en la descripción, sin contar el texto que el canal repite en todos sus videos) y se excluyen temas ajenos (música, videojuegos, recetas, fútbol…).
+
 **Listas (playlists)**
 - **Mis listas**: crea listas (“Charla del lunes”, “Inducción nuevos”) desde el botón ⋮ de cualquier recurso. Reordénalas, renómbralas o bórralas (con “Deshacer”).
 - **Ver lista**: reproductor integrado con la cola al costado. Pasa solo al siguiente video (avance automático), con botones Anterior / Siguiente y atajos de teclado `N` y `P`.

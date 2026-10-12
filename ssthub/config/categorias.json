@@ -4,7 +4,7 @@
   "umbralRelevancia": 6,
   "maxCategoriasPorItem": 4,
   "maxSectoresPorItem": 2,
-  "excluirGlobal": ["elecciones", "gratificacion*", "feriado*", "sorteo*", "pride", "premium", "classification unit", "country club", "cts", "convocatoria* cas", "bolsa de trabajo", "ofertas de empleo", "vacantes"],
+  "excluirGlobal": ["elecciones", "gratificacion*", "feriado*", "sorteo*", "pride", "premium", "classification unit", "country club", "cts", "convocatoria* cas", "bolsa de trabajo", "ofertas de empleo", "vacantes", "music video", "video musical", "videoclip", "official video", "video oficial", "lyric*", "letra de la cancion", "karaoke", "reggaeton", "cumbia", "bachata", "gameplay", "minecraft", "fortnite", "roblox", "free fire", "receta*", "futbol", "partido de futbol", "goles", "horoscopo", "tarot", "farandula", "chisme*", "unboxing", "maquillaje", "bitcoin", "criptomoneda*", "crypto*", "dinosaurio*", "pelicula completa", "anime", "telenovela"],
   "frasesGenericas": ["seguridad y salud en el trabajo", "seguridad y salud ocupacional", "seguridad, salud ocupacional", "seguridad salud ocupacional", "salud y seguridad en el trabajo", "salud y seguridad ocupacional", "seguridad y salud", "salud y seguridad", "occupational health and safety", "occupational safety and health", "health and safety", "safety and health"],
   "grupos": [
     { "id": "alto-riesgo", "nombre": "Riesgos críticos y alto riesgo" },

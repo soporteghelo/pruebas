@@ -142,7 +142,7 @@ async function main() {
     leerJson(RUTA_BIBLIOTECA, { items: [] }),
   ]);
   const cacheListas = await leerJson(RUTA_CACHE_LISTAS, {});
-  const opc = { maxItems: 5000, maxPorFuente: 60, maxPorCanalConClave: 150, listasPorCanal: 10, diasCacheListas: 7, concurrencia: 6, buscarImagenEnPagina: true, ...cfgFuentes.opciones };
+  const opc = { filtrarTodo: true, maxItems: 5000, maxPorFuente: 60, maxPorCanalConClave: 150, listasPorCanal: 10, diasCacheListas: 7, concurrencia: 6, buscarImagenEnPagina: true, ...cfgFuentes.opciones };
   const clasificador = crearClasificador(cfgCategorias);
   const etiquetador = crearEtiquetador(cfgHashtags);
   // --sin-red: solo reclasifica la biblioteca (rápido, sin internet), útil al editar la configuración.
@@ -342,7 +342,9 @@ async function main() {
     if (ocultos.has(it.id)) { descartes.ocultos++; continue; }
     if (it.origen !== 'manual' && clasificador.excluido(it.titulo, f?.excluir)) { descartes.excluidos++; continue; }
     const r = clasificador.clasificar({ ...it, resumen: resumenPropio(it) }, it.pista ?? f?.categoria, f?.sector);
-    if (it.origen !== 'manual' && (f?.filtrar || it.origen === 'busqueda') && !r.relevante) { descartes.irrelevantes++; continue; }
+    // Solo entra lo que trata de seguridad laboral (con filtrarTodo, en todas las fuentes; los enlaces manuales siempre).
+    const exigirRelevancia = opc.filtrarTodo || f?.filtrar || it.origen === 'busqueda';
+    if (it.origen !== 'manual' && exigirRelevancia && !r.relevante) { descartes.irrelevantes++; continue; }
     it.categorias = r.categorias;
     it.sectores = r.sectores;
     publicados.push(it);

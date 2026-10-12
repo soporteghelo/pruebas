@@ -88,6 +88,9 @@
     fuente: '<path d="M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/>',
     descargar: '<path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/>',
     nuevo: '<path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1M5.6 18.4l2.1-2.1m8.6-8.6 2.1-2.1"/>',
+    globo: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    cerrar: '<path d="M18 6 6 18M6 6l12 12"/>',
+    numeral: '<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>',
   };
   const svg = (nombre, clase = '') => `<svg${clase ? ` class="${clase}"` : ''} viewBox="0 0 24 24" aria-hidden="true">${TRAZOS[nombre]}</svg>`;
 
@@ -114,7 +117,8 @@
       // El buscador mira título, descripción, hashtags y fuente. No usa los nombres de los temas:
       // así "IPERC" encuentra lo que habla de IPERC y no todo lo que está clasificado en ese tema.
       _tit: norm(i.titulo),
-      _txt: norm([i.resumen, i.fuente, ...hashtags.map((h) => `${h} ${HASHTAGS.get(h).etiqueta.replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2')}`)].join(' ')),
+      _tags: norm(hashtags.map((h) => `${h} ${HASHTAGS.get(h).etiqueta.replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2')}`).join(' · ')),
+      _txt: norm(`${i.resumen || ''} · ${i.fuente}`),
     };
   });
   const POR_ID = new Map(ITEMS.map((i) => [i.id, i]));
@@ -205,6 +209,10 @@
   let ocultos = new Set(almacen.leer('ocultos', []));
   let misListas = almacen.leer('listas', []);
   let modoVista = almacen.leer('vista', 'grilla');
+  // Los videos de YouTube se ven dentro del portal (reproductor oficial). Se puede elegir abrirlos en YouTube.
+  // Abierto como archivo (doble clic) no se puede: YouTube no reproduce dentro de páginas sin dirección web.
+  let preferenciaVideos = almacen.leer('videos', 'aqui');
+  const verDentro = (i) => Boolean(i?.ytId) && !esArchivoLocal && preferenciaVideos === 'aqui';
 
   // "Nuevo desde tu última visita": la referencia se fija al abrir y se mantiene durante la sesión.
   const refVisita = (() => {
@@ -262,9 +270,42 @@
     },
   };
 
-  // Una lista puede ser tuya (m-…), destacada (d-…) o compartida por enlace (c).
+  // "A continuación": videos relacionados con uno (mismo tema, hashtags y sector; primero lo recomendado
+  // para tu país; máximo 4 por fuente para que haya variedad).
+  const cacheRelacionados = new Map();
+  function relacionados(i, max = 24) {
+    if (cacheRelacionados.has(i.id)) return cacheRelacionados.get(i.id);
+    const temas = new Set(i.categorias);
+    const tags = new Set(i.hashtags);
+    const sectores = new Set(i.sectores);
+    const puntos = (x) => (x.categorias[0] === i.categorias[0] ? 3 : 0)
+      + x.categorias.filter((c) => temas.has(c)).length
+      + x.hashtags.filter((h) => tags.has(h)).length * 0.8
+      + x.sectores.filter((s) => sectores.has(s)).length * 0.7
+      + (x.fuenteId === i.fuenteId ? 0.6 : 0)
+      + x._rec * 0.35;
+    const porFuente = new Map();
+    const salida = visibles()
+      .filter((x) => x.ytId && x.id !== i.id && x.categorias.some((c) => temas.has(c)))
+      .map((x) => ({ x, p: puntos(x) }))
+      .sort((a, b) => b.p - a.p)
+      .filter(({ x }) => { const n = porFuente.get(x.fuenteId) ?? 0; porFuente.set(x.fuenteId, n + 1); return n < 4; })
+      .slice(0, max)
+      .map(({ x }) => x);
+    cacheRelacionados.set(i.id, salida);
+    return salida;
+  }
+
+  // Una lista puede ser tuya (m-…), destacada (d-…), compartida por enlace (c)
+  // o la cola "A continuación" de un video que se ve dentro del portal (r-…).
   function obtenerLista(ref) {
     if (!ref) return null;
+    if (ref.startsWith('r-')) {
+      const i = POR_ID.get(ref.slice(2));
+      if (!i?.ytId) return null;
+      const c0 = CATS.get(i.categorias[0]) || CAT_RESPALDO;
+      return { ref, tipo: 'relacionados', nombre: 'A continuación', descripcion: `Relacionados con ${c0.nombre}`, icono: '▶️', color: c0.color, ids: [i.id, ...relacionados(i).map((x) => x.id)], editable: false };
+    }
     if (ref === 'c') {
       if (!estado.compartida?.ids.length) return null;
       return { ref, tipo: 'compartida', nombre: estado.compartida.nombre || 'Lista compartida', descripcion: 'Alguien compartió esta lista contigo.', icono: '🔗', color: '#FFC21A', ids: estado.compartida.ids, editable: false };
@@ -288,11 +329,11 @@
   //   #/listas  #/lista/<ref>  #/ver/<ref>/<n>  #/guardados  #/vistos
   //   filtros: ?q=&tipo=&sector=&idioma=&fuente=&orden=&nuevos=   lista compartida: ?n=&i=
   // =====================================================================
-  const FILTROS_BASE = { q: '', tipo: 'todo', sector: 'todos', idioma: 'todos', fuente: 'todas', orden: 'recomendados', nuevos: '' };
+  const FILTROS_BASE = { q: '', tipo: 'todo', sector: 'todos', idioma: 'todos', fuente: 'todas', orden: 'recomendados', nuevos: '', tags: '' };
   const estado = { vista: 'inicio', id: null, pos: 0, compartida: null, ...FILTROS_BASE };
   const VISTAS = {
     c: 'categoria', s: 'sector', t: 'hashtag', f: 'fuente', explorar: 'explorar', categorias: 'explorar',
-    listas: 'listas', lista: 'lista', ver: 'ver', guardados: 'guardados', vistos: 'vistos',
+    listas: 'listas', lista: 'lista', ver: 'ver', v: 'ver', guardados: 'guardados', vistos: 'vistos',
   };
   const VISTAS_CON_GRILLA = new Set(['inicio', 'categoria', 'sector', 'hashtag', 'fuente', 'guardados', 'vistos']);
   const POR_PAGINA = 24;
@@ -305,6 +346,7 @@
     const p = new URLSearchParams(qs);
     estado.vista = VISTAS[partes[0]] || 'inicio';
     estado.id = partes[1] ?? null;
+    if (partes[0] === 'v' && estado.id) estado.id = `r-${estado.id}`; // #/v/<video>: ver un video dentro del portal
     estado.pos = Math.max(0, parseInt(partes[2], 10) || 0);
     estado.compartida = p.get('i') ? { nombre: (p.get('n') || '').slice(0, 60), ids: p.get('i').split('.').filter(Boolean).slice(0, 100) } : null;
     for (const k of Object.keys(FILTROS_BASE)) estado[k] = p.get(k) || FILTROS_BASE[k];
@@ -316,7 +358,8 @@
   function hashDe(e) {
     const base = {
       inicio: '/', categoria: `/c/${e.id}`, sector: `/s/${e.id}`, hashtag: `/t/${e.id}`, fuente: `/f/${e.id}`,
-      explorar: '/explorar', listas: '/listas', lista: `/lista/${e.id}`, ver: `/ver/${e.id}/${e.pos || 0}`,
+      explorar: '/explorar', listas: '/listas', lista: `/lista/${e.id}`,
+      ver: e.id?.startsWith('r-') ? `/v/${e.id.slice(2)}${e.pos ? `/${e.pos}` : ''}` : `/ver/${e.id}/${e.pos || 0}`,
       guardados: '/guardados', vistos: '/vistos',
     }[e.vista];
     const p = new URLSearchParams();
@@ -340,26 +383,249 @@
   }
 
   const hayFiltros = () => Boolean(estado.q) || estado.tipo !== 'todo' || estado.idioma !== 'todos' || estado.fuente !== 'todas'
-    || estado.sector !== 'todos' || Boolean(estado.nuevos);
+    || estado.sector !== 'todos' || Boolean(estado.nuevos) || Boolean(estado.tags);
   const cuantosFiltrosMovil = () => [estado.sector !== 'todos' && estado.vista !== 'sector', estado.idioma !== 'todos',
     estado.fuente !== 'todas' && estado.vista !== 'fuente', estado.orden !== 'recomendados', Boolean(estado.nuevos)].filter(Boolean).length;
 
-  const PALABRAS_VACIAS = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'en', 'y', 'o', 'a', 'al', 'con', 'por', 'para', 'un', 'una', 'que', 'como', 'the', 'of', 'and', 'to', 'in']);
-  function tokensDe(texto) {
-    const todos = norm(texto).split(/[^a-z0-9]+/).filter(Boolean);
-    const utiles = todos.filter((t) => !PALABRAS_VACIAS.has(t));
-    return (utiles.length ? utiles : todos).map((t) => {
-      const raiz = t.length > 4 ? t.replace(/(es|s)$/, '') : t; // "arneses" encuentra "arnés"
-      return raiz.length >= 4 ? raiz : t;
-    });
-  }
-  const tokensBusqueda = () => tokensDe(estado.q);
+  // ---------- Buscador ----------
+  // 1) Coincidencia exacta: cada palabra debe aparecer al comienzo de una palabra del título, hashtags o descripción.
+  //    Puntaje: título > hashtags > descripción; frase completa y todas las palabras en el título suman extra.
+  // 2) Sinónimos y siglas de SST (también español ↔ inglés): "LOTO" encuentra "bloqueo y etiquetado".
+  // 3) Si no hay nada: corrige errores de tipeo ("estintor" → "extintor"), luego acepta la mayoría
+  //    de las palabras y, al final, ofrece el tema relacionado (avisando en cada caso).
+  const PALABRAS_VACIAS = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'en', 'y', 'o', 'a', 'al', 'con', 'por', 'para', 'un', 'una', 'que', 'como', 'se', 'su', 'the', 'of', 'and', 'to', 'in', 'for', 'on']);
+  const SINONIMOS = [
+    ['loto', 'bloqueo y etiquetado', 'lockout', 'tagout'],
+    ['epp', 'equipo de proteccion personal', 'equipos de proteccion personal', 'ppe', 'epi', 'elementos de proteccion personal'],
+    ['rcp', 'reanimacion cardiopulmonar', 'cpr'],
+    ['dea', 'desfibrilador', 'aed'],
+    ['ats', 'analisis de trabajo seguro', 'ast', 'jsa'],
+    ['petar', 'permiso escrito de trabajo de alto riesgo'],
+    ['pets', 'procedimiento escrito de trabajo seguro'],
+    ['sst', 'seguridad y salud en el trabajo', 'ssoma', 'sso', 'ssma', 'hse'],
+    ['iso 45001', '45001'],
+    ['extintor', 'fire extinguisher'],
+    ['incendio', 'fire'],
+    ['arnes', 'harness'],
+    ['andamio', 'scaffold'],
+    ['escalera', 'ladder'],
+    ['trabajo en altura', 'trabajos en altura', 'work at height', 'working at height', 'fall protection'],
+    ['espacio confinado', 'espacios confinados', 'confined space'],
+    ['izaje', 'rigging', 'rigger'],
+    ['grua', 'crane'],
+    ['soldadura', 'welding', 'hot work', 'trabajo en caliente'],
+    ['montacargas', 'montacarga', 'forklift', 'carretilla elevadora'],
+    ['excavacion', 'zanja', 'trench', 'excavation'],
+    ['ruido', 'noise'],
+    ['fatiga', 'fatigue', 'somnolencia'],
+    ['primeros auxilios', 'first aid'],
+    ['accidente', 'accident'],
+    ['incidente', 'incident'],
+    ['investigacion', 'investigation'],
+    ['estres', 'stress'],
+    ['ergonomia', 'ergonomic', 'ergonomics'],
+    ['quimico', 'chemical'],
+    ['electrico', 'electrical', 'electricidad'],
+    ['caida', 'fall'],
+    ['guante', 'gloves'],
+    ['casco', 'hard hat', 'helmet'],
+    ['mineria', 'mining', 'minero', 'mina'],
+    ['voladura', 'blasting', 'explosivo'],
+    ['rescate', 'rescue'],
+    ['emergencia', 'emergency'],
+    ['evacuacion', 'evacuation'],
+    ['sismo', 'terremoto', 'earthquake'],
+    ['manejo defensivo', 'conduccion defensiva', 'defensive driving'],
+    ['matpel', 'materiales peligrosos', 'hazmat'],
+    ['hoja de seguridad', 'hds', 'msds', 'sds'],
+    ['5 porques', 'cinco porques', '5 whys'],
+    ['arbol de causas', 'arbol de fallas'],
+    ['causa raiz', 'root cause'],
+    ['cuasi accidente', 'casi accidente', 'near miss'],
+    ['liderazgo', 'leadership'],
+    ['cultura de seguridad', 'safety culture'],
+    ['salud mental', 'mental health'],
+    ['charla de 5 minutos', 'charla de seguridad', 'toolbox talk', 'safety talk'],
+    ['riesgo critico', 'riesgos criticos', 'critical risk'],
+    ['control critico', 'controles criticos', 'critical control'],
+  ].map((g) => g.map((t) => norm(t)));
+  const SINONIMOS_DE = new Map();
+  for (const grupo of SINONIMOS) for (const t of grupo) SINONIMOS_DE.set(t, [...new Set([...(SINONIMOS_DE.get(t) || []), ...grupo.filter((x) => x !== t)])]);
+
   const escaparRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // Cada palabra buscada debe ser el comienzo de una palabra del texto ("iperc" → "IPERC continuo").
-  // Las siglas cortas (ATS, EPP, RCP, 5S) deben coincidir completas para no aparecer dentro de otras palabras.
-  const patronesDe = (tokens) => tokens.map((t) => new RegExp(`(?<![a-z0-9])${escaparRe(t)}${t.length <= 3 ? '(?![a-z0-9])' : ''}`));
-  const enTitulo = (i, pats) => pats.every((p) => p.test(i._tit));
-  const coincide = (i, pats) => pats.every((p) => p.test(i._tit) || p.test(i._txt));
+  const raizDe = (t) => { const r = t.length > 4 ? t.replace(/(es|s)$/, '') : t; return r.length >= 4 ? r : t; }; // "arneses" → "arnes"
+  function palabrasDe(texto) {
+    const todas = norm(texto).split(/[^a-z0-9]+/).filter(Boolean);
+    const utiles = todas.filter((t) => !PALABRAS_VACIAS.has(t));
+    return utiles.length ? utiles : todas;
+  }
+  const tokensDe = (texto) => palabrasDe(texto).map(raizDe);
+  const tokensBusqueda = () => tokensDe(estado.q);
+  // Patrón de un término (una palabra o una frase): cada palabra al comienzo de una palabra del texto;
+  // las siglas cortas (ATS, EPP, RCP, 5S) deben coincidir completas.
+  function patronTermino(termino) {
+    const ps = termino.split(' ').filter(Boolean).map(raizDe);
+    const ultima = ps.at(-1);
+    const cuerpo = ps.map(escaparRe).join('[\\s-]+');
+    return new RegExp(`(?<![a-z0-9])${cuerpo}${ultima.length <= 3 ? '(?![a-z0-9])' : ''}`);
+  }
+  const patronesDe = (tokens) => tokens.map(patronTermino);
+
+  function prepararBusqueda(texto) {
+    const crudas = palabrasDe(texto.replace(/^#/, ''));
+    if (!crudas.length) return null;
+    const terminos = crudas.map((w) => {
+      const alternativas = new Set([...(SINONIMOS_DE.get(w) || []), ...(SINONIMOS_DE.get(raizDe(w)) || [])]);
+      return { p: patronTermino(w), alt: [...alternativas].map(patronTermino) };
+    });
+    const frase = crudas.join(' ');
+    return {
+      crudas,
+      terminos,
+      frase: crudas.length > 1 ? patronTermino(frase) : null,
+      altFrase: (SINONIMOS_DE.get(frase) || []).map(patronTermino),
+      // para resaltar en los títulos: cada término (y sus sinónimos) hasta el final de la palabra
+      resaltar: [...terminos.flatMap((t) => [t.p, ...t.alt]), ...(SINONIMOS_DE.get(frase) || []).map(patronTermino)]
+        .map((p) => new RegExp(`${p.source}[a-z0-9]*`, 'g')),
+    };
+  }
+
+  function puntuar(i, b) {
+    let puntos = 0;
+    let encontrados = 0;
+    let enTitulo = 0;
+    for (const t of b.terminos) {
+      let s = 0;
+      if (t.p.test(i._tit)) { s = 4; enTitulo++; }
+      else if (t.p.test(i._tags)) s = 2.5;
+      else if (t.p.test(i._txt)) s = 1.2;
+      else if (t.alt.some((p) => p.test(i._tit))) { s = 2.6; enTitulo++; }
+      else if (t.alt.some((p) => p.test(i._tags))) s = 1.6;
+      else if (t.alt.some((p) => p.test(i._txt))) s = 0.8;
+      if (s) { encontrados++; puntos += s; }
+    }
+    // "primeros auxilios" también encuentra "First Aid" aunque cada palabra por separado no tenga sinónimo
+    if (encontrados < b.terminos.length && b.altFrase.length) {
+      const n = b.terminos.length;
+      if (b.altFrase.some((p) => p.test(i._tit))) { puntos = 3 * n; encontrados = n; enTitulo = n; }
+      else if (b.altFrase.some((p) => p.test(i._tags) || p.test(i._txt))) { puntos = 1.2 * n; encontrados = n; }
+    }
+    if (!encontrados) return null;
+    if (b.frase?.test(i._tit)) puntos += 5;
+    else if (b.frase?.test(i._txt)) puntos += 1.5;
+    if (enTitulo === b.terminos.length) puntos += 3;
+    return { puntos: puntos + i._rec * 0.12, encontrados, completo: encontrados === b.terminos.length };
+  }
+
+  // Corrección de tipeo con el vocabulario de títulos y hashtags (se arma la primera vez que hace falta).
+  let vocabulario = null;
+  function obtenerVocabulario() {
+    if (vocabulario) return vocabulario;
+    vocabulario = new Map();
+    for (const i of ITEMS) for (const w of `${i._tit} ${i._tags}`.split(/[^a-z0-9]+/)) if (w.length >= 3) vocabulario.set(w, (vocabulario.get(w) || 0) + 1);
+    return vocabulario;
+  }
+  function distancia(a, b, maximo) {
+    if (Math.abs(a.length - b.length) > maximo) return maximo + 1;
+    let previa = Array.from({ length: b.length + 1 }, (_, k) => k);
+    for (let x = 1; x <= a.length; x++) {
+      const actual = [x];
+      let minimo = x;
+      for (let y = 1; y <= b.length; y++) {
+        actual[y] = Math.min(previa[y] + 1, actual[y - 1] + 1, previa[y - 1] + (a[x - 1] === b[y - 1] ? 0 : 1));
+        minimo = Math.min(minimo, actual[y]);
+      }
+      if (minimo > maximo) return maximo + 1;
+      previa = actual;
+    }
+    return previa[b.length];
+  }
+  function corregir(crudas) {
+    const voc = obtenerVocabulario();
+    let cambio = false;
+    const nuevas = crudas.map((w) => {
+      if (w.length < 4 || /\d/.test(w)) return w;
+      for (const k of voc.keys()) if (k.startsWith(raizDe(w))) return w; // la palabra existe
+      const maximo = w.length >= 8 ? 2 : 1;
+      let mejor = null, mejorD = maximo + 1, mejorF = 0;
+      for (const [k, f] of voc) {
+        const d = distancia(w, k, maximo);
+        if (d < mejorD || (d === mejorD && f > mejorF)) { mejor = k; mejorD = d; mejorF = f; }
+      }
+      if (!mejor || mejorD > maximo) return w;
+      cambio = true;
+      return mejor;
+    });
+    return cambio ? nuevas.join(' ') : null;
+  }
+
+  // Busca en una lista de recursos. Devuelve los recursos ordenados por relevancia y cómo se encontraron.
+  function buscarEn(xs, texto, { permitirTema = true } = {}) {
+    const b = prepararBusqueda(texto);
+    if (!b) return { items: xs, modo: null };
+    const evaluar = (bb) => {
+      const res = [];
+      for (const i of xs) { const r = puntuar(i, bb); if (r) res.push({ i, r }); }
+      return res;
+    };
+    const porPuntos = (res) => res.sort((a, c) => c.r.puntos - a.r.puntos).map((x) => x.i);
+    const res = evaluar(b);
+    const completos = res.filter((x) => x.r.completo);
+    if (completos.length) return { items: porPuntos(completos), modo: 'exacta', b };
+
+    const correccion = corregir(b.crudas);
+    if (correccion) {
+      const b2 = prepararBusqueda(correccion);
+      const completos2 = evaluar(b2).filter((x) => x.r.completo);
+      if (completos2.length) return { items: porPuntos(completos2), modo: 'corregida', correccion, b: b2 };
+    }
+    if (b.terminos.length > 1) {
+      const minimo = Math.ceil(b.terminos.length / 2);
+      const parciales = res.filter((x) => x.r.encontrados >= minimo);
+      if (parciales.length) return { items: porPuntos(parciales), modo: 'parcial', b };
+    }
+    if (permitirTema) {
+      const temas = temasDeBusqueda(tokensDe(texto)).slice(0, 3);
+      if (temas.length) {
+        const ids = new Set(temas.flatMap((c) => [...temasDe(c.id)]));
+        return { items: xs.filter((i) => i.categorias.some((c) => ids.has(c))).sort((a, c) => c._rec - a._rec), modo: 'tema', temas, b };
+      }
+    }
+    return { items: [], modo: 'vacia', b };
+  }
+
+  // Marca en el título las palabras encontradas (normaliza letra por letra para ubicar el texto original).
+  function resaltar(texto, patrones) {
+    if (!patrones?.length) return esc(texto);
+    let normal = '';
+    const origen = [];
+    for (let k = 0; k < texto.length;) {
+      const cp = texto.codePointAt(k);
+      const ancho = cp > 0xffff ? 2 : 1;
+      for (const ch of norm(String.fromCodePoint(cp))) { normal += ch; origen.push([k, k + ancho]); }
+      k += ancho;
+    }
+    const tramos = [];
+    for (const re of patrones) {
+      re.lastIndex = 0;
+      for (let m = re.exec(normal); m; m = re.exec(normal)) {
+        if (!m[0].length) { re.lastIndex++; continue; }
+        tramos.push([origen[m.index][0], origen[m.index + m[0].length - 1][1]]);
+      }
+    }
+    if (!tramos.length) return esc(texto);
+    tramos.sort((a, c) => a[0] - c[0]);
+    let html = '';
+    let pos = 0;
+    for (const [a, c] of tramos) {
+      if (c <= pos) continue;
+      const desde = Math.max(a, pos);
+      html += esc(texto.slice(pos, desde)) + `<mark>${esc(texto.slice(desde, c))}</mark>`;
+      pos = c;
+    }
+    return html + esc(texto.slice(pos));
+  }
+
   // Temas cuyo nombre o palabras clave contienen lo buscado ("extintor" → Prevención de incendios). Solo se sugieren.
   const CLAVES_CAT = new Map(D.categorias.map((c) => [c.id, norm([c.nombre, ...(c.claves || [])].join(' | '))]));
   const temasDeBusqueda = (tokens) => {
@@ -376,7 +642,7 @@
     cabecera: $('#cabecera'), secciones: $('#secciones'), herramientas: $('#herramientas'), seg: $('#segTipo'),
     selSector: $('#selSector'), selIdioma: $('#selIdioma'), selFuente: $('#selFuente'), selOrden: $('#selOrden'),
     btnFiltros: $('#btnFiltros'), burbujaFiltros: $('#burbujaFiltros'),
-    resultado: $('#resultado'), grilla: $('#grilla'), vacio: $('#vacio'), centinela: $('#centinela'), pie: $('#pie'),
+    resultado: $('#resultado'), barraHashtags: $('#barraHashtags'), grilla: $('#grilla'), vacio: $('#vacio'), centinela: $('#centinela'), pie: $('#pie'),
     hoja: $('#hoja'), hojaVelo: $('#hojaVelo'), hojaTitulo: $('#hojaTitulo'), hojaCuerpo: $('#hojaCuerpo'),
     btnMas: $('#btnMas'), btnInstalar: $('#btnInstalar'),
   };
@@ -436,6 +702,7 @@
     if (!caja) return;
     const botones = [`<button type="button" class="nav-item" data-accion="elegir-pais">${svg('brujula', 'nav-ico')}<span class="nombre">Tu país: ${esc(nombrePais(miPais))}</span></button>`];
     if (puedeInstalar()) botones.push(`<button type="button" class="nav-item" data-accion="instalar">${svg('descargar', 'nav-ico')}<span class="nombre">Instalar la app</span></button>`);
+    if (!esArchivoLocal) botones.push(`<button type="button" class="nav-item" data-accion="alternar-videos">${svg('play', 'nav-ico relleno')}<span class="nombre">Videos: ${preferenciaVideos === 'aqui' ? 'se ven aquí' : 'se abren en YouTube'}</span></button>`);
     if (ocultos.size) botones.push(`<button type="button" class="nav-item" data-accion="restaurar-ocultos">${svg('ocultar', 'nav-ico')}<span class="nombre">Restaurar ocultos</span><span class="cuenta">${ocultos.size}</span></button>`);
     caja.innerHTML = botones.length ? `<p class="nav-titulo">Opciones</p>${botones.join('')}` : '';
   }
@@ -456,7 +723,7 @@
   function marcarActivos() {
     const clave = claveRuta();
     $$('#lateral [data-ruta], #chipsCat [data-ruta]').forEach((a) => (a.dataset.ruta === clave ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
-    const pestana = PESTANA[estado.vista];
+    const pestana = estado.vista === 'ver' && estado.id?.startsWith('r-') ? 'inicio' : PESTANA[estado.vista];
     $$('#tabbar [data-ruta]').forEach((a) => (a.dataset.ruta === pestana ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
     if (estado.vista === 'fuente') $('#detFuentes').open = true;
     const chip = el.chips.querySelector('[aria-current="page"]');
@@ -493,11 +760,26 @@
     ? `<img class="${clase}" src="${esc(i.miniatura)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-item="${i.id}">`
     : respaldo(i));
 
+  // Origen del recurso: la plataforma de video (YouTube, Vimeo…) o la web de donde viene.
+  const PLATAFORMAS = [
+    [/(^|.)youtube.com$|^youtu.be$/, 'YouTube', 'sello-youtube'],
+    [/(^|.)vimeo.com$/, 'Vimeo', 'sello-vimeo'],
+    [/(^|.)dailymotion.com$/, 'Dailymotion', 'sello-dailymotion'],
+    [/(^|.)(facebook.com|fb.watch)$/, 'Facebook', 'sello-facebook'],
+    [/(^|.)tiktok.com$/, 'TikTok', 'sello-tiktok'],
+    [/(^|.)linkedin.com$/, 'LinkedIn', 'sello-linkedin'],
+  ];
+  const LOGO_YT = '<svg class="logo-yt" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="5" width="22" height="14" rx="4" fill="#fff"/><path d="M10 9v6l5-3z" fill="#E62117"/></svg>';
+  function plataformaDe(i) {
+    const p = PLATAFORMAS.find(([re]) => re.test(i._dom));
+    if (!p) return { nombre: i._dom || 'Web', clase: 'sello-web' };
+    return { nombre: p[1] === 'YouTube' && i.short ? 'YouTube Shorts' : p[1], clase: p[2] };
+  }
   function selloTipo(i) {
-    if (i.short) return `<span class="sello sello-video sello-short">${svg('play')} Short</span>`;
-    if (i.tipo === 'video') return `<span class="sello sello-video">${svg('play')} Video</span>`;
-    if (i.tipo === 'documento') return `<span class="sello">${svg('documento')} PDF</span>`;
-    return `<span class="sello">${svg('articulo')} Artículo</span>`;
+    const p = plataformaDe(i);
+    const icono = p.clase === 'sello-youtube' ? LOGO_YT : p.clase === 'sello-web' ? svg(i.tipo === 'documento' ? 'documento' : 'globo') : svg('play', 'relleno');
+    const tipo = i.tipo === 'documento' ? 'PDF · ' : '';
+    return `<span class="sello sello-origen ${p.clase}" title="Origen: ${esc(p.nombre)}">${icono}<span class="sello-txt">${tipo}${esc(p.nombre)}</span></span>`;
   }
 
   function tarjeta(i) {
@@ -506,18 +788,18 @@
     const destino = destinoDe(i);
     const enlace = `href="${esc(i.url)}" target="_blank" rel="noopener noreferrer" data-salida="${i.id}"`;
     return `<article class="tarjeta${vistos[i.id] ? ' visto' : ''}" data-id="${i.id}">
-      <a class="mini" ${enlace}${i.ytId ? ` data-yt="${esc(i.ytId)}"` : ''} style="--cat:${c0.color}" aria-label="${esc(i.titulo)}. Abrir en ${esc(destino)} (pestaña nueva)">
+      <a class="mini" ${enlace}${i.ytId ? ` data-yt="${esc(i.ytId)}"` : ''} style="--cat:${c0.color}" aria-label="${esc(i.titulo)}. ${verDentro(i) ? 'Ver aquí' : `Abrir en ${esc(destino)} (pestaña nueva)`}">
         ${imagenDe(i)}
         <span class="sellos">${selloTipo(i)}${esNuevo(i) ? `<span class="sello sello-nuevo">Nuevo</span>` : ''}${i.destacado ? `<span class="sello sello-video sello-dest">${svg('estrella')} Recomendado</span>` : ''}</span>
         ${i.duracion ? `<span class="sello sello-dur">${duracion(i.duracion)}</span>` : ''}
         <span class="sello sello-visto">${svg('check')} Visto</span>
-        <span class="mini-salida">${svg('externo')} Abrir en ${esc(destino)}</span>
+        <span class="mini-salida">${verDentro(i) ? `${svg('play', 'relleno')} Ver aquí` : `${svg('externo')} Abrir en ${esc(destino)}`}</span>
         <span class="progreso"><i></i></span>
       </a>
       <button type="button" class="fav${guardado ? ' activo' : ''}" data-fav="${i.id}" aria-pressed="${guardado}" aria-label="${guardado ? 'Quitar de guardados' : 'Guardar'}">${svg('corazon')}</button>
       <div class="info">
         <div class="info-sup">
-          <a class="titulo" ${enlace} title="${esc(i.resumen || i.titulo)}">${esc(i.titulo)}</a>
+          <a class="titulo" ${enlace} title="${esc(i.resumen || i.titulo)}">${busqueda?.b ? resaltar(i.titulo, busqueda.b.resaltar) : esc(i.titulo)}</a>
           <button type="button" class="mas-opciones" data-menu="${i.id}" aria-label="Más opciones: ${esc(i.titulo)}">${svg('puntos')}</button>
         </div>
         <div class="meta">${avatarFuente(i.fuente)}<a class="fuente" href="#/f/${esc(i.fuenteId)}" title="Ver todo de ${esc(i.fuente)}">${esc(i.fuente)}</a></div>
@@ -598,9 +880,14 @@
         </div>
       </div>`;
     } else if (vista === 'inicio') {
-      if (busquedaAmpliada) {
+      const otra = (texto) => `<a class="limpiar" href="#/?q=${encodeURIComponent(texto)}">${esc(texto)}</a>`;
+      if (busqueda?.modo === 'tema') {
         html = cabSimple(`Sin coincidencias exactas para “${esc(q)}”`, 'Ningún título ni descripción lo menciona. Te mostramos recursos del tema relacionado:') +
-          `<div class="relacionadas relacionadas-busqueda">${busquedaAmpliada.map((c) => chipCat(c)).join('')}</div>`;
+          `<div class="relacionadas relacionadas-busqueda">${busqueda.temas.map((c) => chipCat(c)).join('')}</div>`;
+      } else if (busqueda?.modo === 'corregida') {
+        html = cabSimple(`Resultados para “${esc(busqueda.correccion)}”`, `No encontramos “${esc(q)}”; mostramos lo más parecido. ¿Buscabas exactamente lo que escribiste? Revisa la ortografía.`);
+      } else if (busqueda?.modo === 'parcial') {
+        html = cabSimple(`Resultados para “${esc(q)}”`, `Ningún recurso tiene todas las palabras; mostramos los que tienen la mayoría. Prueba con menos palabras, por ejemplo ${otra(busqueda.b.crudas[0])}.`);
       } else {
         const temas = temasDeBusqueda(tokensBusqueda()).slice(0, 4);
         html = cabSimple(`Resultados para “${esc(q)}”`, 'Recursos que lo mencionan en el título, la descripción o sus hashtags. Primero los que lo dicen en el título.') +
@@ -745,10 +1032,14 @@
 
   const urlYoutubeDeLista = (videos) => `https://www.youtube.com/watch_videos?video_ids=${videos.slice(0, 50).map((i) => i.ytId).join(',')}`;
 
-  // ---------- Reproductor de listas ----------
-  let reproductor = null; // { player, ytId }
+  // ---------- Reproductor ----------
+  // Hay un solo reproductor de YouTube para toda la app (#flotante, fuera de la página). En la página del video
+  // se coloca encima del espacio reservado (#repPantalla); al navegar a otra parte pasa a "mini" en una esquina
+  // y sigue sonando. Nunca se mueve en el documento: mover un iframe lo recargaría y cortaría el video.
+  let reproductor = null; // { player, ref, ids, nombre, pos, ytId, compartida }
   let cargaApiYT = null;
   let avanceAutomatico = almacen.leer('autoavance', true);
+  const flotante = $('#flotante');
 
   function cargarApiYoutube() {
     if (window.YT?.Player) return Promise.resolve();
@@ -763,10 +1054,123 @@
     return cargaApiYT;
   }
 
-  function destruirReproductor() {
+  const enSuPagina = () => Boolean(reproductor) && estado.vista === 'ver' && estado.id === reproductor.ref;
+  const itemSonando = () => (reproductor ? POR_ID.get(reproductor.ids[reproductor.pos]) : null);
+  const rutaDelReproductor = () => hashDe({ vista: 'ver', id: reproductor.ref, pos: reproductor.pos, compartida: reproductor.compartida });
+
+  function cerrarReproductor() {
     try { reproductor?.player?.destroy(); } catch { /* ya no existe */ }
     reproductor = null;
+    $('#flotanteVideo').innerHTML = '<div id="repVideo"></div>';
+    flotante.hidden = true;
+    flotante.classList.remove('minimizado');
   }
+
+  // Pone el reproductor sobre su espacio en la página del video, o en la esquina si estás en otra parte.
+  function ubicarFlotante() {
+    document.body.classList.toggle('con-mini', Boolean(reproductor) && !enSuPagina());
+    if (!reproductor) { flotante.hidden = true; return; }
+    const lugar = enSuPagina() ? $('#repPantalla') : null;
+    if (lugar?.dataset.afuera) { flotante.hidden = true; return; }
+    flotante.hidden = false;
+    if (lugar) {
+      const r = lugar.getBoundingClientRect();
+      flotante.classList.remove('minimizado');
+      Object.assign(flotante.style, { top: `${r.top + scrollY}px`, left: `${r.left + scrollX}px`, width: `${r.width}px`, height: `${r.height}px` });
+    } else {
+      flotante.classList.add('minimizado');
+      flotante.removeAttribute('style');
+    }
+    actualizarBarraMini();
+  }
+  new ResizeObserver(() => ubicarFlotante()).observe(document.body);
+  window.addEventListener('resize', ubicarFlotante);
+
+  function actualizarBarraMini() {
+    const i = itemSonando();
+    if (!i) return;
+    $('#flotanteTitulo').textContent = i.titulo;
+    $('#flotanteLista').textContent = reproductor.ids.length > 1 ? `${reproductor.nombre} · ${reproductor.pos + 1} de ${reproductor.ids.length}` : i.fuente;
+  }
+
+  function iconoPausa(sonando) {
+    $('#flotantePausa').innerHTML = sonando ? '<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>' : `<svg class="relleno" viewBox="0 0 24 24">${TRAZOS.play}</svg>`;
+    $('#flotantePausa').setAttribute('aria-label', sonando ? 'Pausar' : 'Reproducir');
+  }
+
+  // Empieza (o continúa, si ya es el mismo) el video de una lista.
+  function reproducir(l, pos) {
+    const i = POR_ID.get(l.ids[pos]);
+    if (!i?.ytId) return;
+    const mismo = reproductor && reproductor.ytId === i.ytId;
+    const datos = { ref: l.ref, ids: l.ids, nombre: l.nombre, pos, ytId: i.ytId, compartida: l.ref === 'c' ? estado.compartida : null };
+    if (reproductor) {
+      Object.assign(reproductor, datos);
+      if (!mismo && reproductor.player?.loadVideoById) reproductor.player.loadVideoById(i.ytId);
+      ubicarFlotante();
+      return;
+    }
+    reproductor = { ...datos, player: null };
+    ubicarFlotante();
+    cargarApiYoutube().then(() => {
+      if (!reproductor || reproductor.player) return;
+      reproductor.player = new window.YT.Player('repVideo', {
+        videoId: reproductor.ytId,
+        host: 'https://www.youtube-nocookie.com',
+        playerVars: { autoplay: 1, rel: 0, playsinline: 1, modestbranding: 1 },
+        events: {
+          onReady: (e) => { if (reproductor && e.target.getVideoData?.().video_id !== reproductor.ytId) e.target.loadVideoById(reproductor.ytId); },
+          onStateChange: (e) => {
+            const actual = itemSonando();
+            if (e.data === window.YT.PlayerState.PLAYING && actual) registrarVisto(actual.id);
+            if (e.data === window.YT.PlayerState.PLAYING) iconoPausa(true);
+            if (e.data === window.YT.PlayerState.PAUSED) iconoPausa(false);
+            if (e.data === window.YT.PlayerState.ENDED && avanceAutomatico) avanzar(1);
+          },
+          onError: () => {
+            const actual = itemSonando();
+            if (enSuPagina() && actual) pantallaAfuera(actual, 'Su autor no permite verlo fuera de YouTube.');
+            else if (!avanzar(1)) cerrarReproductor();
+          },
+        },
+      });
+    }).catch(() => {
+      const actual = itemSonando();
+      if (enSuPagina() && actual) pantallaAfuera(actual, 'No se pudo conectar con YouTube.');
+    });
+  }
+
+  // Siguiente o anterior. En la página del video también actualiza la página; en "mini" solo cambia el video
+  // (y salta los artículos, que no se pueden reproducir).
+  function avanzar(delta) {
+    if (!reproductor) return false;
+    if (enSuPagina()) {
+      const pos = reproductor.pos + delta;
+      if (pos < 0 || pos >= reproductor.ids.length) return false;
+      irAPosicion(pos);
+      return true;
+    }
+    let pos = reproductor.pos + delta;
+    while (pos >= 0 && pos < reproductor.ids.length && !POR_ID.get(reproductor.ids[pos])?.ytId) pos += Math.sign(delta);
+    const i = POR_ID.get(reproductor.ids[pos]);
+    if (!i?.ytId) return false;
+    reproductor.pos = pos;
+    reproductor.ytId = i.ytId;
+    reproductor.player?.loadVideoById?.(i.ytId);
+    actualizarBarraMini();
+    return true;
+  }
+
+  const ACCIONES_FLOTANTE = {
+    pausa() {
+      const p = reproductor?.player;
+      if (!p?.getPlayerState) return;
+      if (p.getPlayerState() === window.YT.PlayerState.PLAYING) p.pauseVideo(); else p.playVideo();
+    },
+    siguiente() { avanzar(1); },
+    ampliar() { if (reproductor) location.hash = rutaDelReproductor(); },
+    cerrar() { cerrarReproductor(); },
+  };
 
   function sufijoCompartida() {
     return estado.id === 'c' ? hashDe({ ...estado, vista: 'lista' }).replace(/^[^?]*/, '') : '';
@@ -791,7 +1195,7 @@
     const destino = destinoDe(i);
     const sufijo = sufijoCompartida();
 
-    if (!soloCambio) {
+    if (!soloCambio || !$('#repPantalla')) {
       el.cabecera.innerHTML = '';
       el.secciones.innerHTML = `<div class="reproductor">
         <div class="rep-principal"><div class="rep-pantalla" id="repPantalla"></div><div class="rep-info" id="repInfo"></div></div>
@@ -799,41 +1203,16 @@
       </div>`;
     }
 
-    // Pantalla: video integrado, aviso para abrir afuera o tarjeta de artículo.
+    // Pantalla: el reproductor flotante se coloca encima; para artículos (o sin conexión) se muestra un aviso.
     const pantalla = $('#repPantalla');
+    pantalla.innerHTML = '';
+    delete pantalla.dataset.afuera;
     if (i.ytId && !esArchivoLocal) {
-      if (reproductor?.player && soloCambio && typeof reproductor.player.loadVideoById === 'function') {
-        reproductor.player.loadVideoById(i.ytId);
-        reproductor.ytId = i.ytId;
-      } else {
-        destruirReproductor();
-        pantalla.innerHTML = `<div id="repVideo"></div>`;
-        const ytId = i.ytId;
-        cargarApiYoutube().then(() => {
-          if (estado.vista !== 'ver' || !$('#repVideo')) return;
-          reproductor = {
-            ytId,
-            player: new window.YT.Player('repVideo', {
-              videoId: ytId,
-              host: 'https://www.youtube-nocookie.com',
-              playerVars: { autoplay: 1, rel: 0, playsinline: 1, modestbranding: 1 },
-              events: {
-                onStateChange: (e) => {
-                  const actual = itemsDeLista(obtenerLista(estado.id))[estado.pos];
-                  if (e.data === window.YT.PlayerState.PLAYING && actual) registrarVisto(actual.id);
-                  if (e.data === window.YT.PlayerState.ENDED && avanceAutomatico) irAPosicion(estado.pos + 1);
-                },
-                onError: () => {
-                  const actual = itemsDeLista(obtenerLista(estado.id))[estado.pos];
-                  if (actual) pantallaAfuera(actual, 'Su autor no permite verlo fuera de YouTube.');
-                },
-              },
-            }),
-          };
-        }).catch(() => pantallaAfuera(i, 'No se pudo conectar con YouTube.'));
-      }
+      // Las listas se identifican por sus recursos (la de "A continuación" usa los que había al empezar).
+      const ids = items.map((x) => x.id);
+      reproducir({ ref: l.ref, ids, nombre: l.nombre }, estado.pos);
     } else {
-      destruirReproductor();
+      reproductor?.player?.pauseVideo?.();
       if (i.ytId) pantallaAfuera(i, 'Para verla aquí, abre el portal con <b>ABRIR_PORTAL.bat</b> o desde su dirección en internet.');
       else pantallaAfuera(i, i.tipo === 'documento' ? 'Este recurso es un documento PDF.' : 'Este recurso es un artículo.', true);
     }
@@ -852,23 +1231,27 @@
         <a class="icono-btn" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer" data-salida="${i.id}" aria-label="Abrir en ${esc(destino)}" title="Abrir en ${esc(destino)}">${svg('externo')}</a>
         <button type="button" class="icono-btn" data-menu="${i.id}" aria-label="Más opciones">${svg('puntos')}</button>
       </div>
+      <p class="rep-nota">Sigue explorando: el video continúa en una ventanita mientras navegas.</p>
       <div class="etiquetas">${i.categorias.map((c) => chipCat(CATS.get(c))).join('')}${i.hashtags.map((h) => chipHashtag(h)).join('')}</div>
       ${i.resumen ? `<p class="rep-resumen">${esc(i.resumen)}</p>` : ''}`;
 
     $('#repCola').innerHTML = `
-      <header><div><b>${esc(l.nombre)}</b><span>${estado.pos + 1} de ${items.length}</span></div><a href="#/lista/${l.ref}${sufijo}">Ver lista</a></header>
+      <header><div><b>${esc(l.nombre)}</b><span>${l.tipo === 'relacionados' ? esc(l.descripcion) : `${estado.pos + 1} de ${items.length}`}</span></div>${l.tipo === 'relacionados' ? '' : `<a href="#/lista/${l.ref}${sufijo}">Ver lista</a>`}</header>
       <ol>${items.map((x, k) => `<li${k === estado.pos ? ' aria-current="true"' : ''}>
         <button type="button" data-ir="${k}"><span class="cola-n">${k === estado.pos ? svg('play') : k + 1}</span>
           <span class="cola-mini">${imagenDe(x)}</span>
           <span class="cola-txt"><b>${esc(x.titulo)}</b><small>${esc(x.fuente)}</small></span></button></li>`).join('')}</ol>`;
     $('#repCola li[aria-current]')?.scrollIntoView({ block: 'nearest' });
     document.title = `${i.titulo} · ${l.nombre} · SST Hub`;
+    requestAnimationFrame(ubicarFlotante);
   }
 
   function pantallaAfuera(i, motivo, esArticulo = false) {
     const pantalla = $('#repPantalla');
     if (!pantalla) return;
-    destruirReproductor();
+    pantalla.dataset.afuera = '1';
+    reproductor?.player?.pauseVideo?.();
+    ubicarFlotante();
     pantalla.innerHTML = `<div class="rep-afuera" style="--cat:${(CATS.get(i.categorias[0]) || CAT_RESPALDO).color}">
       ${i.miniatura ? `<img src="${esc(i.miniatura)}" alt="" referrerpolicy="no-referrer">` : ''}
       <div class="rep-afuera-caja">
@@ -894,22 +1277,32 @@
     if (estado.sector !== 'todos' && vista !== 'sector') xs = xs.filter((i) => i.sectores.includes(estado.sector));
     if (estado.idioma !== 'todos') xs = xs.filter((i) => i.idioma === estado.idioma);
     if (estado.fuente !== 'todas' && vista !== 'fuente') xs = xs.filter((i) => i.fuenteId === estado.fuente);
-    const tokens = tokensBusqueda();
-    busquedaAmpliada = null;
-    if (tokens.length) {
-      const pats = patronesDe(tokens);
-      const exactos = xs.filter((i) => coincide(i, pats));
-      if (exactos.length || vista === 'categoria') return exactos;
-      // Sin coincidencias exactas: se ofrece lo del tema relacionado, avisando en la cabecera.
-      const temas = temasDeBusqueda(tokens).slice(0, 3);
-      if (!temas.length) return [];
-      busquedaAmpliada = temas;
-      const ids = new Set(temas.flatMap((c) => [...temasDe(c.id)]));
-      return xs.filter((i) => i.categorias.some((c) => ids.has(c)));
+    const tags = tagsElegidos();
+    if (tags.length) xs = xs.filter((i) => tags.every((t) => i.hashtags.includes(t)));
+    busqueda = null;
+    if (estado.q.trim()) {
+      busqueda = buscarEn(xs, estado.q, { permitirTema: vista !== 'categoria' });
+      return busqueda.items;
     }
     return xs;
   }
-  let busquedaAmpliada = null;
+  const tagsElegidos = () => (estado.tags ? estado.tags.split(',').filter((t) => HASHTAGS.has(t)) : []);
+
+  // Barra de hashtags: los más frecuentes entre los resultados actuales; cada uno que eliges afina más.
+  function pintarBarraHashtags(base) {
+    const elegidos = tagsElegidos();
+    const omitir = new Set([...elegidos, estado.vista === 'hashtag' ? estado.id : null]);
+    const conteo = new Map();
+    for (const i of base) for (const h of i.hashtags) if (!omitir.has(h)) conteo.set(h, (conteo.get(h) ?? 0) + 1);
+    const sugeridos = [...conteo].filter(([, n]) => n >= 2 && n < base.length).sort((a, b) => b[1] - a[1]).slice(0, 24);
+    el.barraHashtags.hidden = !elegidos.length && !sugeridos.length;
+    el.barraHashtags.innerHTML = `<span class="barra-hashtags-titulo">${svg('numeral')} Filtrar</span>`
+      + (elegidos.length ? `<button type="button" class="hashtag-filtro" data-tag-limpiar>Todos</button>` : '')
+      + elegidos.map((h) => `<button type="button" class="hashtag-filtro activo" data-tag="${h}" aria-pressed="true" title="Quitar">#${esc(HASHTAGS.get(h).etiqueta)} ${svg('cerrar')}</button>`).join('')
+      + sugeridos.map(([h, n]) => `<button type="button" class="hashtag-filtro" data-tag="${h}" aria-pressed="false">#${esc(HASHTAGS.get(h).etiqueta)}<span>${nf.format(n)}</span></button>`).join('');
+  }
+
+  let busqueda = null; // última búsqueda: { modo: exacta | corregida | parcial | tema | vacia, correccion, temas, b }
 
   function ordenar(xs) {
     const copia = [...xs];
@@ -921,13 +1314,8 @@
       case 'vistas': return copia.sort((a, b) => (b.vistas ?? -1) - (a.vistas ?? -1) || porFecha(a, b));
       default: {
         if (estado.vista === 'vistos') return copia.sort((a, b) => vistos[b.id] - vistos[a.id]);
-        const tokens = tokensBusqueda();
-        if (tokens.length && !busquedaAmpliada) {
-          // En una búsqueda: primero lo que lo dice en el título; después, lo recomendado.
-          const pats = patronesDe(tokens);
-          const rango = (i) => (enTitulo(i, pats) ? 0 : 1);
-          return copia.sort((a, b) => rango(a) - rango(b) || b._rec - a._rec);
-        }
+        // En una búsqueda, el buscador ya los dejó ordenados por relevancia.
+        if (busqueda?.modo && busqueda.modo !== 'tema') return copia;
         const incluidos = new Set(copia);
         return ordenRecomendado().filter((i) => incluidos.has(i));
       }
@@ -973,7 +1361,8 @@
     const nombres = { categoria: CATS, sector: SECTORES };
     const donde = nombres[estado.vista] ? ` en ${esc(nombres[estado.vista].get(estado.id).nombre)}` : '';
     const sector = estado.sector !== 'todos' && SECTORES.has(estado.sector) ? ` · sector ${esc(SECTORES.get(estado.sector).nombre)}` : '';
-    el.resultado.innerHTML = `<b>${plural(lista.length, 'recurso', 'recursos')}</b>${donde}${sector}${estado.nuevos ? ' · solo nuevos' : ''}` +
+    const tags = tagsElegidos().map((h) => `#${esc(HASHTAGS.get(h).etiqueta)}`).join(' + ');
+    el.resultado.innerHTML = `<b>${plural(lista.length, 'recurso', 'recursos')}</b>${donde}${sector}${tags ? ` · ${tags}` : ''}${estado.nuevos ? ' · solo nuevos' : ''}` +
       (hayFiltros() ? `<button type="button" class="limpiar" data-accion="limpiar">Quitar filtros</button>` : '');
   }
 
@@ -1013,14 +1402,14 @@
     el.grilla.innerHTML = '';
     lista = [];
     mostrados = 0;
-    if (estado.vista !== 'ver') destruirReproductor();
 
     const conGrilla = VISTAS_CON_GRILLA.has(estado.vista);
-    el.herramientas.hidden = el.resultado.hidden = el.grilla.hidden = !conGrilla;
+    el.herramientas.hidden = el.resultado.hidden = el.grilla.hidden = el.barraHashtags.hidden = !conGrilla;
 
     if (!conGrilla) {
       const pintores = { explorar: pintarExplorar, listas: pintarListas, lista: pintarDetalleLista, ver: () => pintarReproductor(false) };
       pintores[estado.vista]();
+      ubicarFlotante();
       const titulos = { explorar: 'Explorar', listas: 'Listas', lista: obtenerLista(estado.id)?.nombre };
       if (titulos[estado.vista]) document.title = `${titulos[estado.vista]} · SST Hub`;
       return;
@@ -1031,11 +1420,13 @@
     pintarSeccionesInicio();
     el.herramientas.hidden = !base.length && !hayFiltros();
     pintarSegmentos(base);
+    pintarBarraHashtags(base);
     sincronizarControles();
     lista = ordenar(estado.tipo === 'todo' ? base : base.filter((i) => i.tipo === estado.tipo));
     pintarMas();
     pintarResultado();
     if (!lista.length) pintarVacio();
+    ubicarFlotante();
 
     const titulos = {
       categoria: () => CATS.get(estado.id).nombre, sector: () => SECTORES.get(estado.id).nombre,
@@ -1161,6 +1552,7 @@
     const op = (accion, icono, texto, extra = '') => `<button type="button" class="menu-op" data-op="${accion}" data-id="${id}"${extra}>${svg(icono)}<span>${texto}</span></button>`;
     abrirHoja('Opciones', `${cabeceraItem(i)}
       <div class="menu">
+        ${i.ytId && !esArchivoLocal ? `<a class="menu-op" href="#/v/${id}">${svg('play', 'relleno')}<span>Ver aquí</span></a>` : ''}
         <a class="menu-op" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer" data-salida="${id}">${svg('externo')}<span>Abrir en ${esc(destinoDe(i))}</span></a>
         ${op('agregar-lista', 'lista', 'Agregar a una lista')}
         ${op('guardar', 'corazon', guardado ? 'Quitar de guardados' : 'Guardar')}
@@ -1276,6 +1668,7 @@
     miPais = p;
     almacen.guardar('pais', p);
     calcularPuntajes();
+    cacheRelacionados.clear();
     cerrarHoja();
     pintarExtrasLateral();
     render();
@@ -1391,6 +1784,13 @@
     'compartir-lista'() { hojaCompartirLista(obtenerLista(estado.id)); },
     instalar() { instalarApp(); },
     'elegir-pais'() { hojaPais(); },
+    'alternar-videos'() {
+      preferenciaVideos = preferenciaVideos === 'aqui' ? 'youtube' : 'aqui';
+      almacen.guardar('videos', preferenciaVideos);
+      pintarExtrasLateral();
+      render();
+      aviso(preferenciaVideos === 'aqui' ? 'Los videos se verán dentro de SST Hub.' : 'Los videos se abrirán en YouTube.');
+    },
   };
 
   const OPERACIONES = {
@@ -1407,7 +1807,19 @@
     const t = e.target;
     if (t.closest('[data-cerrar-hoja]')) { cerrarHoja(); return; }
     const salida = t.closest('a[data-salida]');
-    if (salida) { registrarVisto(salida.dataset.salida); if (salida.closest('.hoja')) cerrarHoja(); return; }
+    if (salida) {
+      const item = POR_ID.get(salida.dataset.salida);
+      const afuera = salida.closest('.hoja, #repInfo, .rep-afuera') || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0;
+      if (verDentro(item) && !afuera) {
+        e.preventDefault();
+        cerrarSugerencias();
+        location.hash = `#/v/${item.id}`;
+        return;
+      }
+      registrarVisto(salida.dataset.salida);
+      if (salida.closest('.hoja')) cerrarHoja();
+      return;
+    }
     const fav = t.closest('[data-fav]');
     if (fav) { alternarGuardado(fav.dataset.fav, fav); return; }
     const menu = t.closest('[data-menu]');
@@ -1437,6 +1849,16 @@
       aviso('Quitado de la lista.', { accion: 'Deshacer', alHacer: () => { const x = Listas.buscar(l.id); x.items.splice(pos, 0, itemId); Listas.guardar(); render(); } });
       return;
     }
+    const tag = t.closest('[data-tag]');
+    if (tag) {
+      const elegidos = tagsElegidos();
+      const h = tag.dataset.tag;
+      actualizarFiltros({ tags: (elegidos.includes(h) ? elegidos.filter((x) => x !== h) : [...elegidos, h]).join(',') });
+      return;
+    }
+    if (t.closest('[data-tag-limpiar]')) { actualizarFiltros({ tags: '' }); return; }
+    const accionFlotante = t.closest('[data-flotante]');
+    if (accionFlotante) { ACCIONES_FLOTANTE[accionFlotante.dataset.flotante]?.(); return; }
     const rep = t.closest('[data-rep]');
     if (rep) { irAPosicion(estado.pos + (rep.dataset.rep === 'siguiente' ? 1 : -1)); return; }
     const ir = t.closest('[data-ir]');
@@ -1523,8 +1945,8 @@
     if (!esHashtag) {
       const fuentes = [...FUENTES.values()].filter((f) => norm(f.nombre).includes(t)).slice(0, 2);
       if (fuentes.length) grupos.push(['Fuentes', fuentes.map((f) => ({ href: `#/f/${f.id}`, html: `${avatarFuente(f.nombre)}<span>${esc(f.nombre)}</span><small>${nf.format(f.total)}</small>` }))]);
-      const pats = patronesDe(tokensDe(t));
-      const recursos = visibles().filter((i) => enTitulo(i, pats)).sort((a, b) => b._rec - a._rec).slice(0, 5);
+      const r = buscarEn(visibles(), t, { permitirTema: false });
+      const recursos = r.modo === 'exacta' || r.modo === 'corregida' ? r.items.slice(0, 5) : [];
       if (recursos.length) grupos.push(['Recursos', recursos.map((i) => ({ href: i.url, salida: i.id, html: `<span class="sug-mini">${imagenDe(i, 'sug-img')}</span><span class="sug-titulo">${esc(i.titulo)}</span>${svg('externo')}` }))]);
     }
     return grupos;
@@ -1676,13 +2098,22 @@
     else if (estado.vista === 'ver' && (e.key === 'p' || e.key === 'P')) irAPosicion(estado.pos - 1);
   });
 
-  window.addEventListener('hashchange', () => {
+  // Al volver a una página de resultados se recupera la posición del scroll (y los recursos ya cargados).
+  const posiciones = new Map();
+  window.addEventListener('hashchange', (e) => {
     if (location.hash.endsWith('#hashtags') && estado.vista === 'explorar') { $('#hashtags')?.scrollIntoView(); return; }
+    if (VISTAS_CON_GRILLA.has(estado.vista)) posiciones.set(new URL(e.oldURL).hash, { y: scrollY, n: mostrados });
     leerHash();
     cerrarMenu();
     cerrarHoja();
     render();
-    window.scrollTo(0, 0);
+    const previa = VISTAS_CON_GRILLA.has(estado.vista) && posiciones.get(location.hash);
+    if (previa) {
+      while (mostrados < Math.min(previa.n, lista.length)) pintarMas();
+      window.scrollTo(0, previa.y);
+    } else {
+      window.scrollTo(0, 0);
+    }
   });
 
   new IntersectionObserver((entradas) => {
