@@ -1,0 +1,21 @@
+{
+  "name": "portal-sst-hub",
+  "version": "2.0.0",
+  "description": "Portal que reúne y clasifica contenido de seguridad y salud en el trabajo; cada miniatura enlaza a su fuente original.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "recolectar": "node --env-file-if-exists=.env scripts/recolectar.mjs",
+    "abrir": "node scripts/servidor.mjs --abrir",
+    "agregar": "node scripts/curar.mjs agregar",
+    "ocultar": "node scripts/curar.mjs ocultar",
+    "categorias": "node scripts/curar.mjs categorias",
+    "ver": "node scripts/servidor.mjs --abrir"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.11.2"
+  }
+}

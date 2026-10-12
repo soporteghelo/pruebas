@@ -1,0 +1,5 @@
+{
+  "_ayuda": "Curaduría manual. 'agregar': enlaces que quieres en el portal aunque no vengan de una fuente (videos de YouTube, artículos, PDFs, Vimeo...). Solo 'url' es obligatorio; el título y la miniatura se leen solos. 'ocultar': URLs o IDs que nunca deben aparecer. Atajos: npm run agregar -- <url> [categoria]   |   npm run ocultar -- <url>",
+  "agregar": [],
+  "ocultar": []
+}

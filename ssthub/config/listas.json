@@ -1,0 +1,153 @@
+{
+  "_ayuda": "Listas destacadas que se arman solas en cada recolección. Reglas (todas opcionales): 'categorias', 'sectores' y 'hashtags' (basta con que el recurso tenga uno de cada lista indicada), 'grupo' (grupo de temas), 'tipo' (video | articulo | documento), 'idioma' (es | en), 'orden' (recientes | vistas), 'max'. 'enlaces' agrega URLs fijas al inicio de la lista. Una lista con menos de 3 recursos no se publica.",
+  "listas": [
+    {
+      "id": "induccion",
+      "nombre": "Inducción básica de seguridad",
+      "descripcion": "Lo esencial para el primer día: EPP, autocuidado, emergencias y primeros auxilios.",
+      "icono": "🦺",
+      "color": "#FFC21A",
+      "categorias": ["conceptos-seguridad", "epp", "cultura-liderazgo", "respuesta-emergencias", "incendios", "primeros-auxilios", "seguridad-general"],
+      "tipo": "video",
+      "idioma": "es",
+      "orden": "vistas",
+      "max": 15
+    },
+    {
+      "id": "charla-5-minutos",
+      "nombre": "Para tu charla de 5 minutos",
+      "descripcion": "Videos cortos y directos para empezar la guardia con un tema de seguridad.",
+      "icono": "⏱️",
+      "color": "#0D9488",
+      "hashtags": ["charla5minutos", "autocuidado", "epp", "percepciondelriesgo", "fatiga", "leccionesaprendidas", "trabajoenaltura", "loto"],
+      "tipo": "video",
+      "idioma": "es",
+      "orden": "recientes",
+      "max": 20
+    },
+    {
+      "id": "lecciones-aprendidas",
+      "nombre": "Accidentes reales: lecciones aprendidas",
+      "descripcion": "Investigaciones y recreaciones de accidentes para aprender sin pagar el precio.",
+      "icono": "🔎",
+      "color": "#B91C1C",
+      "categorias": ["lecciones-aprendidas", "investigacion-incidentes"],
+      "tipo": "video",
+      "orden": "vistas",
+      "max": 20
+    },
+    {
+      "id": "metodos-investigacion",
+      "nombre": "ICAM y métodos de investigación",
+      "descripcion": "ICAM, TapRooT, árbol de causas, 5 porqués, Ishikawa y cómo investigar un incidente.",
+      "icono": "🧩",
+      "color": "#9333EA",
+      "categorias": ["metodos-investigacion", "investigacion-incidentes"],
+      "orden": "vistas",
+      "max": 20
+    },
+    {
+      "id": "riesgos-criticos",
+      "nombre": "Riesgos críticos: lo que puede matar",
+      "descripcion": "Altura, energías peligrosas, izaje, equipos móviles, caída de rocas, explosivos y más: cómo controlarlos.",
+      "icono": "⚠️",
+      "color": "#F59E0B",
+      "categorias": ["riesgos-criticos"],
+      "tipo": "video",
+      "orden": "vistas",
+      "max": 25
+    },
+    {
+      "id": "alto-riesgo",
+      "nombre": "Trabajos de alto riesgo",
+      "descripcion": "Altura, espacios confinados, LOTO, trabajos en caliente, izaje, electricidad y excavaciones.",
+      "icono": "⚠️",
+      "color": "#F59E0B",
+      "grupo": "alto-riesgo",
+      "orden": "recientes",
+      "max": 25
+    },
+    {
+      "id": "mineria",
+      "nombre": "Seguridad en minería",
+      "descripcion": "Lo más relevante para la mina subterránea y el tajo abierto.",
+      "icono": "⛏️",
+      "color": "#B45309",
+      "sectores": ["mineria"],
+      "orden": "recientes",
+      "max": 25
+    },
+    {
+      "id": "construccion",
+      "nombre": "Seguridad en construcción",
+      "descripcion": "Obras, andamios, excavaciones y trabajo en altura en construcción.",
+      "icono": "🧱",
+      "color": "#EA580C",
+      "sectores": ["construccion"],
+      "orden": "recientes",
+      "max": 25
+    },
+    {
+      "id": "salud-mental",
+      "nombre": "Salud mental en el trabajo",
+      "descripcion": "Estrés, fatiga, acoso, violencia y bienestar emocional.",
+      "icono": "🧠",
+      "color": "#EC4899",
+      "categorias": ["psicosocial"],
+      "orden": "recientes",
+      "max": 20
+    },
+    {
+      "id": "emergencias",
+      "nombre": "Preparación ante emergencias",
+      "descripcion": "Incendios, evacuación, sismos, RCP y uso del DEA.",
+      "icono": "🧯",
+      "color": "#DC2626",
+      "categorias": ["respuesta-emergencias", "incendios", "primeros-auxilios"],
+      "orden": "recientes",
+      "max": 20
+    },
+    {
+      "id": "iperc",
+      "nombre": "IPERC paso a paso",
+      "descripcion": "Identificación de peligros, evaluación de riesgos y controles: IPERC línea base y continuo.",
+      "icono": "🧮",
+      "color": "#2563EB",
+      "categorias": ["iperc"],
+      "orden": "vistas",
+      "max": 20
+    },
+    {
+      "id": "conceptos",
+      "nombre": "Conceptos básicos para nuevos",
+      "descripcion": "Peligro y riesgo, actos y condiciones, pirámide de Bird, jerarquía de controles.",
+      "icono": "💡",
+      "color": "#CA8A04",
+      "categorias": ["conceptos-seguridad"],
+      "orden": "vistas",
+      "max": 20
+    },
+    {
+      "id": "supervisores",
+      "nombre": "Para supervisores: gestión y normativa",
+      "descripcion": "IPERC, ATS, PETS, permisos de trabajo, inspecciones, indicadores y normativa.",
+      "icono": "📋",
+      "color": "#3B82F6",
+      "categorias": ["gestion-normativa", "iperc", "herramientas-preventivas", "inspecciones-observaciones", "indicadores"],
+      "idioma": "es",
+      "orden": "recientes",
+      "max": 20
+    },
+    {
+      "id": "en-ingles",
+      "nombre": "Recursos en inglés",
+      "descripcion": "Lo mejor de CSB, NSC, ASSP, CCOHS, EU-OSHA y WorkSafeBC.",
+      "icono": "🌎",
+      "color": "#6366F1",
+      "idioma": "en",
+      "tipo": "video",
+      "orden": "vistas",
+      "max": 25
+    }
+  ]
+}

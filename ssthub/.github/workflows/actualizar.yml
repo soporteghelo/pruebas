@@ -1,0 +1,56 @@
+# Recolecta contenido todos los días y publica el portal en GitHub Pages.
+# Requisitos: el repositorio es esta carpeta (PORTAL_SST) y en Settings → Pages → Source eliges "GitHub Actions".
+# Opcional: en Settings → Secrets and variables → Actions crea el secreto YT_API_KEY.
+name: Actualizar portal SST
+
+on:
+  schedule:
+    - cron: '0 11 * * *' # todos los días a las 6:00 a. m. (hora de Perú)
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths: ['config/**', 'public/**', 'scripts/**']
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: portal-sst
+  cancel-in-progress: false
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.publicar.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Recolectar y clasificar
+        run: npm run recolectar
+        env:
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+
+      - name: Guardar la biblioteca (para que siga creciendo)
+        run: |
+          git config user.name "portal-sst-bot"
+          git config user.email "portal-sst-bot@users.noreply.github.com"
+          git add data/biblioteca.json public/data/contenido.js
+          git diff --cached --quiet || (git commit -m "Contenido actualizado $(date -u +%F)" && git push)
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: publicar
+        uses: actions/deploy-pages@v4

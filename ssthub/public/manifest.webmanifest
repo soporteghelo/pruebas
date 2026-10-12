@@ -1,0 +1,23 @@
+{
+  "name": "SST Hub — Seguridad laboral",
+  "short_name": "SST Hub",
+  "description": "Videos, guías y noticias de seguridad y salud en el trabajo, ordenados por tema y sector.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#16181B",
+  "theme_color": "#16181B",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "iconos/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "iconos/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "iconos/icono-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Mis listas", "url": "./#/listas", "icons": [{ "src": "iconos/icono-192.png", "sizes": "192x192" }] },
+    { "name": "Guardados", "url": "./#/guardados", "icons": [{ "src": "iconos/icono-192.png", "sizes": "192x192" }] },
+    { "name": "Explorar", "url": "./#/explorar", "icons": [{ "src": "iconos/icono-192.png", "sizes": "192x192" }] }
+  ]
+}

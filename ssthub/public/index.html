@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SST Hub · Seguridad laboral en un solo lugar</title>
+  <meta name="description" content="Videos, guías y noticias de seguridad y salud en el trabajo, ordenados por tema y sector. Arma listas para tus charlas y compártelas.">
+  <meta name="theme-color" content="#16181B">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SST Hub">
+  <meta property="og:title" content="SST Hub · Seguridad laboral en un solo lugar">
+  <meta property="og:description" content="Videos, guías y noticias de seguridad y salud en el trabajo, ordenados por tema y sector.">
+  <meta property="og:type" content="website">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="iconos/icono-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://i.ytimg.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/estilos.css">
+  <script>try { var t = localStorage.getItem('ssthub:tema'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}</script>
+</head>
+<body>
+  <a class="saltar" href="#contenido">Saltar al contenido</a>
+
+  <header class="barra">
+    <a class="logo" href="#/" aria-label="SST Hub, ir al inicio">
+      <svg class="logo-casco" viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="15" fill="#FFC21A"/>
+        <path d="M13 41c0-11.4 8.5-20 19-20s19 8.6 19 20z" fill="#16181B"/>
+        <path d="M29 21.4V16a3 3 0 0 1 6 0v5.4" fill="#16181B"/>
+        <rect x="30.4" y="22" width="3.2" height="19" rx="1.6" fill="#FFC21A"/>
+        <rect x="8" y="41" width="48" height="6.5" rx="3.25" fill="#16181B"/>
+      </svg>
+      <span class="logo-texto">SST <b>Hub</b></span>
+    </a>
+
+    <form class="buscador" role="search" id="formBuscar" autocomplete="off">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7.5"/><path d="m20.5 20.5-4.2-4.2"/></svg>
+      <input id="q" type="search" placeholder="Buscar: arnés, IPERC, #LOTO…" enterkeyhint="search"
+        role="combobox" aria-label="Buscar recursos de seguridad" aria-autocomplete="list" aria-expanded="false" aria-controls="sugerencias">
+      <kbd class="atajo" aria-hidden="true">/</kbd>
+      <div class="sugerencias" id="sugerencias" role="listbox" aria-label="Sugerencias" hidden></div>
+    </form>
+
+    <div class="barra-der">
+      <button class="icono-btn" id="btnInstalar" type="button" aria-label="Instalar la app" title="Instalar la app" hidden>
+        <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg>
+      </button>
+      <a class="icono-btn solo-escritorio" href="#/listas" aria-label="Mis listas" title="Mis listas">
+        <svg viewBox="0 0 24 24"><path d="M3 6h12M3 12h12M3 18h7"/><path d="m16 15 5 3-5 3z"/></svg>
+      </a>
+      <a class="icono-btn solo-escritorio" href="#/guardados" aria-label="Guardados" title="Guardados">
+        <svg viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>
+        <span class="burbuja" data-burbuja="guardados" hidden></span>
+      </a>
+      <button class="icono-btn" id="btnTema" type="button" aria-label="Cambiar entre tema claro y oscuro" title="Tema claro / oscuro">
+        <svg class="ico-luna" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        <svg class="ico-sol" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <nav class="chips-cat solo-movil" id="chipsCat" aria-label="Temas"></nav>
+
+  <div class="layout">
+    <aside class="lateral" id="lateral" aria-label="Navegación"></aside>
+    <div class="velo" id="velo" hidden></div>
+
+    <main id="contenido" tabindex="-1">
+      <section id="cabecera"></section>
+      <section id="secciones"></section>
+
+      <div class="herramientas" id="herramientas">
+        <div class="segmentos" id="segTipo" role="group" aria-label="Tipo de recurso"></div>
+        <div class="herramientas-der">
+          <div class="selects solo-escritorio">
+            <label class="select"><span class="oculto">Sector</span><select id="selSector"></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></label>
+            <label class="select"><span class="oculto">Idioma</span>
+              <select id="selIdioma">
+                <option value="todos">Todos los idiomas</option>
+                <option value="es">Español</option>
+                <option value="en">Inglés</option>
+              </select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></label>
+            <label class="select"><span class="oculto">Fuente</span><select id="selFuente"></select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></label>
+            <label class="select"><span class="oculto">Orden</span>
+              <select id="selOrden">
+                <option value="recientes">Más recientes</option>
+                <option value="vistas">Más vistos</option>
+                <option value="antiguos">Más antiguos</option>
+                <option value="az">Título A–Z</option>
+              </select><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></label>
+          </div>
+          <button class="boton-filtros solo-movil" id="btnFiltros" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filtros<span class="burbuja-filtros" id="burbujaFiltros" hidden></span>
+          </button>
+          <div class="vista-toggle" role="group" aria-label="Forma de ver los recursos">
+            <button type="button" data-vista="grilla" aria-label="Ver en cuadrícula" title="Cuadrícula"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
+            <button type="button" data-vista="lista" aria-label="Ver en lista" title="Lista"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="6" height="5" rx="1"/><rect x="3" y="15" width="6" height="5" rx="1"/><path d="M12 6h9M12 17h9"/></svg></button>
+          </div>
+        </div>
+      </div>
+      <p class="resultado" id="resultado" aria-live="polite"></p>
+
+      <div class="grilla" id="grilla"></div>
+      <div class="vacio" id="vacio" hidden></div>
+      <div class="centinela" id="centinela" aria-hidden="true"></div>
+
+      <footer class="pie" id="pie"></footer>
+    </main>
+  </div>
+
+  <nav class="tabbar solo-movil" id="tabbar" aria-label="Secciones">
+    <a href="#/" data-ruta="inicio"><svg viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg><span>Inicio</span></a>
+    <a href="#/explorar" data-ruta="explorar"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg><span>Explorar</span></a>
+    <a href="#/listas" data-ruta="listas"><svg viewBox="0 0 24 24"><path d="M3 6h12M3 12h12M3 18h7"/><path d="m16 15 5 3-5 3z"/></svg><span>Listas</span></a>
+    <a href="#/guardados" data-ruta="guardados"><svg viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg><span>Guardados</span><span class="burbuja" data-burbuja="guardados" hidden></span></a>
+    <button type="button" id="btnMas" aria-controls="lateral" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span>Más</span></button>
+  </nav>
+
+  <div class="hoja-velo" id="hojaVelo" hidden></div>
+  <section class="hoja" id="hoja" role="dialog" aria-modal="true" aria-labelledby="hojaTitulo" hidden>
+    <div class="hoja-asa" aria-hidden="true"></div>
+    <header class="hoja-cab">
+      <h2 id="hojaTitulo"></h2>
+      <button class="icono-btn" type="button" data-cerrar-hoja aria-label="Cerrar"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </header>
+    <div class="hoja-cuerpo" id="hojaCuerpo"></div>
+  </section>
+
+  <script src="data/contenido.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
