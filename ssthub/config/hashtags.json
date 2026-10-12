@@ -1,7 +1,7 @@
 {
   "_ayuda": "Hashtags automáticos. Cada clave es el hashtag tal como se verá (con tildes y MayúsculasIniciales) y su lista son las palabras que lo activan, con las mismas reglas que categorias.json (* = cualquier terminación; sin importar tildes). Además se conservan los hashtags que las fuentes escriben en sus descripciones (#SST, #SeguridadMinera...) cuando aparecen en al menos 'minimoOriginales' recursos. 'ignorar' descarta hashtags sin valor.",
   "maxPorItem": 5,
-  "minimoOriginales": 3,
+  "minimoOriginales": 5,
   "ignorar": ["shorts", "short", "youtube", "youtubeshorts", "viral", "fyp", "parati", "foryou", "foryoupage", "tiktok", "reels", "video", "videos", "live", "envivo", "peru", "colombia", "chile", "espana", "mexico", "argentina", "news", "noticias", "podcast", "suscribete", "subscribe", "trending", "worksafebc", "csb", "3m", "napo", "insst", "sunafil", "mtpe", "ccs", "fremap", "nebosh", "osha", "ilo", "oit"],
   "hashtags": {
     "Arnés": ["arnes*", "harness*"],
@@ -61,9 +61,9 @@
     "ViolenciaLaboral": ["violencia en el trabajo", "violencia laboral", "violence at work", "workplace violence", "agresion*"],
     "Tecnoestrés": ["tecnoestres", "technostress", "hiperconectividad", "desconexion digital"],
     "PrevenciónDelSuicidio": ["suicidio", "prevencion del suicidio", "suicide"],
-    "IPERC": ["iperc", "matriz iper*", "identificacion de peligros", "hazard identification"],
-    "EvaluaciónDeRiesgos": ["evaluacion de riesgo*", "risk assessment", "matriz de riesgo*", "oira"],
-    "ATS": ["ats", "analisis de trabajo seguro"],
+    "IPERC": ["iperc", "iper", "matriz iper*", "iperc continuo", "iperc linea base"],
+    "EvaluaciónDeRiesgos": ["evaluacion de riesgo*", "risk assessment", "matriz de riesgo*", "oira", "identificacion de peligros", "hazard identification", "analisis de riesgo*"],
+    "ATS": ["ats", "ast", "analisis de trabajo seguro", "analisis seguro de trabajo"],
     "PETS": ["pets", "procedimiento* escrito* de trabajo seguro"],
     "PermisoDeTrabajo": ["permiso* de trabajo", "permit to work"],
     "Ley29783": ["29783", "ley de seguridad y salud en el trabajo"],
@@ -89,7 +89,7 @@
     "PercepciónDelRiesgo": ["percepcion del riesgo", "risk perception"],
     "Charla5Minutos": ["charla* de 5 minutos", "charla* de cinco minutos", "charla* de seguridad", "toolbox talk*", "safety talk*"],
     "Webinar": ["webinar*", "en vivo", "videoconferencia*", "livestream"],
-    "Capacitación": ["capacitacion*", "curso*", "formacion", "training", "entrenamiento", "induccion"],
+    "Capacitación": ["capacitacion* en seguridad", "capacitacion* sst", "capacitacion* ssoma", "capacitacion* en sst", "curso* de seguridad", "curso* sst", "curso* ssoma", "curso* de prevencion", "safety training"],
     "Certificación": ["certificacion*", "certificate*", "diplomado*"],
     "MinaSubterránea": ["mina subterranea", "underground mine*", "socavon*", "subterrane*"],
     "Voladura": ["voladura*", "explosivo*", "blasting"],
@@ -134,6 +134,7 @@
     "Señalización": ["señalizacion", "señales de seguridad", "codigo de colores", "safety signs"],
     "Resbalones": ["resbalon*", "tropiezo*", "caida* al mismo nivel", "slips trips"],
     "Indicadores": ["indice* de frecuencia", "indice* de severidad", "indicador* de seguridad", "leading indicator*", "trifr", "ltifr"],
-    "InteracciónPersonaEquipo": ["interaccion hombre maquina", "interaccion persona equipo", "punto* ciego*", "blind spot*"]
+    "InteracciónPersonaEquipo": ["interaccion hombre maquina", "interaccion persona equipo", "punto* ciego*", "blind spot*"],
+    "JSA": ["jsa", "job safety analysis", "jha", "job hazard analysis"]
   }
 }

@@ -40,8 +40,9 @@ export async function enParalelo(lista, limite, fn) {
 
 export const hash = (s) => createHash('sha1').update(s).digest('hex').slice(0, 12);
 
+// NFKC convierte letras "decorativas" (𝗣𝗘𝗧𝗔𝗥, Ｆｕｌｌ) en letras normales; NFD separa las tildes para quitarlas.
 export const normalizar = (s = '') =>
-  String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  String(s).normalize('NFKC').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 export const slug = (s) => normalizar(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
@@ -73,7 +74,7 @@ export function textoPlano(html = '', max = 400) {
 
 // Títulos sin emojis decorativos ("📢 ¡Nuevo! 🇵🇪" → "¡Nuevo!"); las banderas se ven como letras en Windows.
 export function limpiarTitulo(titulo, max = 200) {
-  const t = textoPlano(titulo, max)
+  const t = textoPlano(titulo, max).normalize('NFKC')
     .replace(/[\p{Extended_Pictographic}\p{Regional_Indicator}\u{FE0F}\u{200D}\u{20E3}]/gu, '')
     .replace(/^\s*(@\w+\s+)+/, '') // "@Marca Título" → "Título"
     .replace(/\s+([,.;:!?])/g, '$1')
@@ -116,4 +117,6 @@ export async function leerJson(ruta, porDefecto) {
   }
 }
 
-export const escribirJson = (ruta, datos) => fs.writeFile(ruta, JSON.stringify(datos, null, 2) + '\n', 'utf8');
+// compacto = true para archivos grandes de trabajo (biblioteca, caché): ocupan mucho menos.
+export const escribirJson = (ruta, datos, compacto = false) =>
+  fs.writeFile(ruta, JSON.stringify(datos, null, compacto ? 0 : 2) + '\n', 'utf8');

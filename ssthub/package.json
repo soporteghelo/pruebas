@@ -6,6 +6,7 @@
   "private": true,
   "scripts": {
     "recolectar": "node --env-file-if-exists=.env scripts/recolectar.mjs",
+    "reclasificar": "node scripts/recolectar.mjs --sin-red",
     "abrir": "node scripts/servidor.mjs --abrir",
     "agregar": "node scripts/curar.mjs agregar",
     "ocultar": "node scripts/curar.mjs ocultar",

@@ -857,3 +857,8 @@ body.con-hoja, body.con-menu { overflow: hidden; }
   .stat b { font-size: 22px; }
   .stat span { font-size: 11.5px; }
 }
+
+/* v3 — país y botones de texto */
+.enlace-boton { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 0; border-radius: 999px; background: transparent; color: var(--texto-2); font: 600 13.5px var(--fuente); cursor: pointer; white-space: nowrap; }
+.enlace-boton:hover { background: var(--superficie-2); color: var(--texto); }
+.enlace-boton svg { width: 16px; height: 16px; }

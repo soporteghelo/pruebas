@@ -38,6 +38,10 @@ export function crearClasificador(config) {
   const ids = new Set(categorias.map((c) => c.id));
   const idsSector = new Set(sectores.map((s) => s.id));
   const excluirGlobal = (config.excluirGlobal ?? []).map(patron);
+  // "Seguridad y Salud Ocupacional" es el nombre del área, no habla de salud ocupacional: para los temas
+  // específicos esas frases genéricas se reemplazan por "sst" antes de buscar palabras clave.
+  const genericas = (config.frasesGenericas ?? []).map((f) => new RegExp(patron(f).source, 'g'));
+  const sinGenericas = (t) => genericas.reduce((x, re) => x.replace(re, ' sst '), t);
 
   return {
     ids,
@@ -61,13 +65,14 @@ export function crearClasificador(config) {
         [normalizar((item.etiquetasFuente ?? []).join(' | ')), MULTIPLICADOR_CAMPO.etiquetas],
         [normalizar(item.resumen), MULTIPLICADOR_CAMPO.resumen],
       ].filter(([t]) => t);
+      const camposEspecificos = campos.map(([t, m]) => [sinGenericas(t), m]);
 
       const puntajes = new Map();
       let relevancia = 0; // solo palabras fuertes de temas de seguridad
       for (const c of categorias) {
         let p = 0;
         for (const [re, peso] of c.reglas) {
-          for (const [texto, mult] of campos) {
+          for (const [texto, mult] of c.generica ? campos : camposEspecificos) {
             if (!re.test(texto)) continue;
             p += peso * mult;
             if (c.cuentaRelevancia && peso === PESO.fuertes) relevancia += peso * mult;

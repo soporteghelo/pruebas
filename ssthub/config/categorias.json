@@ -1,10 +1,11 @@
 {
-  "_ayuda": "Edita este archivo para cambiar cómo se clasifica el contenido. \"fuertes\" suma 3 puntos y \"debiles\" suma 1; si la palabra está en el título vale el triple. Un * significa \"cualquier terminación\" (andamio* = andamio, andamios; linea* de vida = líneas de vida). No importan tildes ni mayúsculas. \"prioridad\" < 1 hace que la categoría ceda el primer lugar a un tema más específico. \"cuentaRelevancia\": false indica que esa categoría (un sector o un formato) no basta para probar que algo es de seguridad. \"incluye\" convierte un tema en \"paraguas\": su página también muestra los recursos de esos subtemas. Después de editar, ejecuta: npm run recolectar",
+  "_ayuda": "Edita este archivo para cambiar cómo se clasifica el contenido. \"fuertes\" suma 3 puntos y \"debiles\" suma 1; si la palabra está en el título vale el triple. Un * significa \"cualquier terminación\" (andamio* = andamio, andamios; linea* de vida = líneas de vida). No importan tildes ni mayúsculas. \"prioridad\" < 1 hace que la categoría ceda el primer lugar a un tema más específico. \"cuentaRelevancia\": false indica que esa categoría (un sector o un formato) no basta para probar que algo es de seguridad. \"incluye\" convierte un tema en \"paraguas\": su página también muestra los recursos de esos subtemas. \"frasesGenericas\" son nombres del área (\"Seguridad y Salud Ocupacional\") que no deben contar para temas específicos como Salud ocupacional. \"umbralRelevancia\" 6 = en fuentes con filtrar, la palabra de seguridad debe estar en el título o la lista de reproducción, o dos veces en la descripción. Después de editar, ejecuta: npm run recolectar",
   "umbral": 3,
-  "umbralRelevancia": 3,
+  "umbralRelevancia": 6,
   "maxCategoriasPorItem": 4,
   "maxSectoresPorItem": 2,
   "excluirGlobal": ["elecciones", "gratificacion*", "feriado*", "sorteo*", "pride", "premium", "classification unit", "country club", "cts", "convocatoria* cas", "bolsa de trabajo", "ofertas de empleo", "vacantes"],
+  "frasesGenericas": ["seguridad y salud en el trabajo", "seguridad y salud ocupacional", "seguridad, salud ocupacional", "seguridad salud ocupacional", "salud y seguridad en el trabajo", "salud y seguridad ocupacional", "seguridad y salud", "salud y seguridad", "occupational health and safety", "occupational safety and health", "health and safety", "safety and health"],
   "grupos": [
     { "id": "alto-riesgo", "nombre": "Riesgos críticos y alto riesgo" },
     { "id": "gestion", "nombre": "Herramientas de gestión" },
@@ -115,7 +116,7 @@
       "icono": "🪨",
       "color": "#78716C",
       "descripcion": "Desatado de rocas, sostenimiento (pernos, malla, shotcrete), geomecánica y control de terreno en minería subterránea.",
-      "fuertes": ["desatado de rocas", "desate de rocas", "desatado", "caida* de roca*", "caida de rocas", "sostenimiento", "shotcrete", "concreto lanzado", "perno* de anclaje", "perno* helicoidal*", "split set*", "malla electrosoldada", "cimbra*", "geomecanic*", "control de terreno", "ground control", "rock fall*", "rockfall*", "rockburst*", "estallido* de roca*", "planchon*", "desatador*", "scaler*"],
+      "fuertes": ["desatado de rocas", "desate de rocas", "desatado", "caida* de roca*", "caida de rocas", "sostenimiento", "shotcrete", "concreto lanzado", "perno* de anclaje", "perno* helicoidal*", "split set*", "malla electrosoldada", "cimbra*", "geomecanic*", "control de terreno", "ground control", "rock fall*", "rockfall*", "rockburst*", "estallido* de roca*", "planchon*", "desatador*", "scaler*", "desate", "desatar rocas", "barretilla*", "sostenimiento activo", "sostenimiento pasivo", "malla* de sostenimiento", "labor* minera*"],
       "debiles": ["roca*", "rock*", "techo* de labor*", "labor* subterranea*", "macizo rocoso"]
     },
     {
@@ -125,7 +126,7 @@
       "icono": "💥",
       "color": "#B91C1C",
       "descripcion": "Manejo, transporte y almacenamiento de explosivos, carguío de taladros, voladura y tiros fallados.",
-      "fuertes": ["voladura*", "explosivo*", "polvorin*", "tiro* cortado*", "tiro* fallado*", "misfire*", "blasting", "blaster*", "explosives", "detonador*", "carguio de taladros", "anfo", "emulsion* explosiva*", "manejo de explosivos", "sucamec", "disparo* de voladura", "perforacion y voladura"],
+      "fuertes": ["voladura*", "explosivo*", "polvorin*", "tiro* cortado*", "tiro* fallado*", "misfire*", "blasting", "blaster*", "explosives", "detonador*", "carguio de taladros", "anfo", "emulsion* explosiva*", "manejo de explosivos", "sucamec", "disparo* de voladura", "perforacion y voladura", "chispeo", "guia de seguridad", "cordon detonante", "fulminante*", "mecha* de seguridad", "dinamita", "examon", "exsa", "famesa", "orica", "enaex"],
       "debiles": ["detonacion*", "disparo*", "taladro*", "perforacion"]
     },
     {
@@ -207,7 +208,7 @@
       "color": "#3B82F6",
       "descripcion": "Ley 29783, DS 005-2012-TR, DS 024-2016-EM, ISO 45001, comités SST, RISST, contratistas y fiscalización.",
       "fuertes": ["ley 29783", "29783", "005-2012-tr", "024-2016-em", "023-2017-em", "ley de seguridad y salud en el trabajo", "ley de prevencion de riesgos laborales", "lprl", "iso 45001", "45001", "ohsas", "sistema* de gestion de seguridad", "sistema* de gestion de la seguridad", "sistema* de gestion de sst", "sgsst", "sg-sst", "comite de seguridad", "comite de sst", "comite sst", "supervisor de sst", "reglamento interno de seguridad", "inspeccion* del trabajo", "inspector* de trabajo", "osha", "linea base", "politica de seguridad", "programa anual de seguridad", "elssa", "gestion de contratistas", "coordinacion de actividades empresariales", "risst", "reglamento interno de seguridad y salud", "programa anual de sst", "passt", "plan anual de seguridad", "osinergmin", "ministerio de trabajo", "decreto supremo"],
-      "debiles": ["normativa", "legislacion", "fiscalizacion", "regulation*", "compliance", "real decreto", "reglamento*", "sancion*", "multa*", "norma*", "ley", "gestion", "inspeccion*", "inspection*", "procedimiento*", "cumplimiento", "requisito*", "auditoria*", "sistema* de gestion", "iso", "standard*", "guia tecnica", "protocolo*", "sunafil", "contratista*", "cae"]
+      "debiles": ["normativa", "legislacion", "fiscalizacion", "regulation*", "compliance", "real decreto", "reglamento*", "sancion*", "multa*", "ley", "inspeccion*", "inspection*", "cumplimiento", "auditoria*", "sistema* de gestion", "guia tecnica", "protocolo*", "sunafil", "contratista*", "cae", "norma", "normas", "normativa*", "decreto*"]
     },
     {
       "id": "indicadores",
@@ -287,8 +288,8 @@
       "icono": "🩺",
       "color": "#06B6D4",
       "descripcion": "Vigilancia médica, exámenes ocupacionales, enfermedades profesionales, riesgo biológico y trabajo en altura geográfica.",
-      "fuertes": ["salud ocupacional", "medicina ocupacional", "medicina del trabajo", "vigilancia de la salud", "vigilancia medica", "examen* medico* ocupacional*", "emo", "enfermedad* ocupacional*", "enfermedad* profesional*", "enfermedades del trabajo", "occupational health", "occupational disease*", "cancer* laboral*", "cancer* ocupacional*", "cancer de origen profesional", "agente* cancerigeno*", "carcinogen*", "riesgo biologico", "agente* biologico*", "aptitud medica", "altura geografica", "mal de altura", "mal agudo de montana", "soroche", "hipoxia", "trabajo en altitud", "high altitude", "salud en el trabajo"],
-      "debiles": ["salud", "medico*", "vacuna*", "sanitari*", "enfermedad*"]
+      "fuertes": ["salud ocupacional", "medicina ocupacional", "medicina del trabajo", "vigilancia de la salud", "vigilancia medica", "examen* medico* ocupacional*", "emo", "enfermedad* ocupacional*", "enfermedad* profesional*", "enfermedades del trabajo", "occupational disease*", "cancer* laboral*", "cancer* ocupacional*", "cancer de origen profesional", "agente* cancerigeno*", "carcinogen*", "riesgo biologico", "agente* biologico*", "aptitud medica", "altura geografica", "mal de altura", "mal agudo de montana", "soroche", "hipoxia", "trabajo en altitud", "high altitude"],
+      "debiles": ["medico*", "vacuna*", "sanitari*", "enfermedad*"]
     },
     {
       "id": "higiene-industrial",

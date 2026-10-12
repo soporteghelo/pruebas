@@ -145,7 +145,9 @@ async function main() {
   const opc = { maxItems: 5000, maxPorFuente: 60, maxPorCanalConClave: 150, listasPorCanal: 10, diasCacheListas: 7, concurrencia: 6, buscarImagenEnPagina: true, ...cfgFuentes.opciones };
   const clasificador = crearClasificador(cfgCategorias);
   const etiquetador = crearEtiquetador(cfgHashtags);
-  const claveYT = process.env.YT_API_KEY?.trim();
+  // --sin-red: solo reclasifica la biblioteca (rápido, sin internet), útil al editar la configuración.
+  const sinRed = process.argv.includes('--sin-red');
+  const claveYT = sinRed ? null : process.env.YT_API_KEY?.trim();
 
   const fuentes = (cfgFuentes.fuentes ?? []).filter((f) => f.activa !== false).map((f) => ({ ...f, id: slug(f.nombre) }));
   const fuentesPorId = new Map(fuentes.map((f) => [f.id, f]));
@@ -215,7 +217,7 @@ async function main() {
     return { videos, leidas };
   };
 
-  await enParalelo(fuentes, opc.concurrencia, async (f) => {
+  await enParalelo(sinRed ? [] : fuentes, opc.concurrencia, async (f) => {
     let leidos = 0;
     let listas = 0;
     try {
@@ -276,7 +278,7 @@ async function main() {
   // 3) Enlaces manuales (solo se consultan la primera vez)
   const manuales = (curaduria.agregar ?? []).map((e) => (typeof e === 'string' ? { url: e } : e)).filter((e) => e.url);
   let manualesNuevos = 0;
-  await enParalelo(manuales, 4, async (e) => {
+  await enParalelo(sinRed ? [] : manuales, 4, async (e) => {
     const previo = porId.get(idDeEnlace(e.url));
     if (previo?.origen === 'manual') {
       Object.assign(previo, { pista: e.categoria, ...(e.titulo && { titulo: e.titulo }), ...(e.miniatura && { miniatura: e.miniatura }) });
@@ -291,6 +293,7 @@ async function main() {
     }
   });
   const urlsManuales = new Set(manuales.map((e) => idDeEnlace(e.url)));
+  if (sinRed) for (const it of porId.values()) if (it.origen === 'manual') urlsManuales.add(it.id);
   for (const it of porId.values()) {
     if (it.origen !== 'manual' || urlsManuales.has(it.id)) continue;
     // Se quitó de curaduria.json: vuelve a su fuente si una la trajo hoy; si no, se elimina.
@@ -301,13 +304,44 @@ async function main() {
   // 4) Clasificar y filtrar toda la biblioteca (así un cambio en la configuración se aplica a todo)
   const ocultos = new Set((curaduria.ocultar ?? []).map(idDeEnlace));
   const descartes = { irrelevantes: 0, excluidos: 0, ocultos: 0, repetidos: 0 };
+
+  // Muchos canales repiten el mismo texto en todas sus descripciones ("Suscríbete a nuestro canal de Seguridad
+  // y Salud Ocupacional…"). Esas frases no dicen de qué trata cada video: se quitan antes de clasificar.
+  const frasesDe = (texto) => String(texto || '').split(/(?<=[.!?¡¿|•\n])\s+|\s[-–|]\s/).map((x) => normalizar(x).replace(/[^a-z0-9 ]+/g, ' ').trim()).filter((x) => x.length > 12);
+  const repetidasPorFuente = new Map();
+  {
+    const conteo = new Map();
+    const totalPorFuente = new Map();
+    for (const it of porId.values()) {
+      totalPorFuente.set(it.fuenteId, (totalPorFuente.get(it.fuenteId) ?? 0) + 1);
+      for (const fr of new Set(frasesDe(it.resumen))) {
+        const clave = `${it.fuenteId}|${fr}`;
+        conteo.set(clave, (conteo.get(clave) ?? 0) + 1);
+      }
+    }
+    for (const [clave, n] of conteo) {
+      const [fid, fr] = [clave.slice(0, clave.indexOf('|')), clave.slice(clave.indexOf('|') + 1)];
+      const total = totalPorFuente.get(fid);
+      if (total >= 6 && n / total >= 0.4) {
+        if (!repetidasPorFuente.has(fid)) repetidasPorFuente.set(fid, new Set());
+        repetidasPorFuente.get(fid).add(fr);
+      }
+    }
+  }
+  const resumenPropio = (it) => {
+    const repetidas = repetidasPorFuente.get(it.fuenteId);
+    if (!repetidas) return it.resumen;
+    return String(it.resumen || '').split(/(?<=[.!?¡¿|•\n])\s+|\s[-–|]\s/)
+      .filter((x) => !repetidas.has(normalizar(x).replace(/[^a-z0-9 ]+/g, ' ').trim())).join(' ');
+  };
+
   let publicados = [];
   for (const it of porId.values()) {
     const f = fuentesPorId.get(it.fuenteId);
     if (it.origen === 'fuente' && !f) { porId.delete(it.id); continue; } // fuente eliminada o desactivada
     if (ocultos.has(it.id)) { descartes.ocultos++; continue; }
     if (it.origen !== 'manual' && clasificador.excluido(it.titulo, f?.excluir)) { descartes.excluidos++; continue; }
-    const r = clasificador.clasificar(it, it.pista ?? f?.categoria, f?.sector);
+    const r = clasificador.clasificar({ ...it, resumen: resumenPropio(it) }, it.pista ?? f?.categoria, f?.sector);
     if (it.origen !== 'manual' && (f?.filtrar || it.origen === 'busqueda') && !r.relevante) { descartes.irrelevantes++; continue; }
     it.categorias = r.categorias;
     it.sectores = r.sectores;
@@ -347,7 +381,7 @@ async function main() {
   }
 
   // 6) Miniaturas que faltan o son muy chicas: se toman de la etiqueta og:image del artículo
-  if (opc.buscarImagenEnPagina) {
+  if (opc.buscarImagenEnPagina && !sinRed) {
     const faltan = publicados.filter((i) => !i.ytId && i.tipo !== 'documento' && (!i.miniatura || pareceMiniaturaChica(i.miniatura)) && (i.ogIntentos ?? 0) < 3);
     await enParalelo(faltan, 4, async (i) => {
       try {
@@ -378,8 +412,8 @@ async function main() {
   // 8) Guardar biblioteca (todo lo recolectado) y la salida de la web (solo lo publicado)
   const recorteBiblioteca = [...porId.values()].sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, opc.maxItems * 2);
   await fs.mkdir(path.dirname(RUTA_BIBLIOTECA), { recursive: true });
-  await escribirJson(RUTA_BIBLIOTECA, { actualizado: ahora, total: recorteBiblioteca.length, items: recorteBiblioteca });
-  await escribirJson(RUTA_CACHE_LISTAS, cacheListas);
+  await escribirJson(RUTA_BIBLIOTECA, { actualizado: ahora, total: recorteBiblioteca.length, items: recorteBiblioteca }, true);
+  await escribirJson(RUTA_CACHE_LISTAS, cacheListas, true);
 
   const agrupar = (clave, ids) => {
     const m = new Map(ids.map((id) => [id, []]));

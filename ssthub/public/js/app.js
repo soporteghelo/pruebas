@@ -19,7 +19,7 @@
   // Utilidades
   // =====================================================================
   const esc = (s = '') => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  const norm = (s = '') => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const norm = (s = '') => String(s).normalize('NFKC').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const dominio = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
   const nf = new Intl.NumberFormat('es');
   const compacto = new Intl.NumberFormat('es', { notation: 'compact', maximumFractionDigits: 1 });
@@ -110,19 +110,92 @@
       sectores,
       hashtags,
       _dom: dominio(i.url),
+      _fecha: Date.parse(i.fecha) || 0,
+      // El buscador mira título, descripción, hashtags y fuente. No usa los nombres de los temas:
+      // así "IPERC" encuentra lo que habla de IPERC y no todo lo que está clasificado en ese tema.
       _tit: norm(i.titulo),
-      _busq: norm([
-        i.titulo, i.resumen, i.fuente,
-        ...categorias.map((c) => CATS.get(c).nombre),
-        ...sectores.map((s) => SECTORES.get(s).nombre),
-        ...hashtags.map((h) => `${h} ${HASHTAGS.get(h).etiqueta}`),
-      ].join(' ')),
+      _txt: norm([i.resumen, i.fuente, ...hashtags.map((h) => `${h} ${HASHTAGS.get(h).etiqueta.replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2')}`)].join(' ')),
     };
   });
   const POR_ID = new Map(ITEMS.map((i) => [i.id, i]));
   const CATS_VISIBLES = D.categorias.filter((c) => c.total > 0);
   const SECTORES_VISIBLES = (D.sectores || []).filter((s) => s.total > 0);
   const CAT_RESPALDO = { color: '#6B7280', icono: '🛡️', nombre: 'Seguridad' };
+  // Un tema "paraguas" (Riesgos críticos, Trabajos de alto riesgo) también muestra sus subtemas.
+  const temasDe = (id) => new Set([id, ...(CATS.get(id)?.incluye || [])]);
+
+  // =====================================================================
+  // País y recomendaciones ("como YouTube": primero lo de tu país, luego lo popular y reciente del resto)
+  // =====================================================================
+  const PAISES = {
+    PE: 'Perú', CO: 'Colombia', CL: 'Chile', MX: 'México', AR: 'Argentina', EC: 'Ecuador', BO: 'Bolivia', VE: 'Venezuela',
+    UY: 'Uruguay', PY: 'Paraguay', CR: 'Costa Rica', GT: 'Guatemala', PA: 'Panamá', DO: 'República Dominicana', HN: 'Honduras',
+    SV: 'El Salvador', NI: 'Nicaragua', ES: 'España', US: 'Estados Unidos', CA: 'Canadá', UK: 'Reino Unido', AU: 'Australia',
+    BR: 'Brasil', IN: 'India', PH: 'Filipinas', ZA: 'Sudáfrica', NZ: 'Nueva Zelanda', LATAM: 'Latinoamérica', EU: 'Europa', INT: 'Internacional',
+  };
+  const HISPANOS = new Set(['PE', 'CO', 'CL', 'MX', 'AR', 'EC', 'BO', 'VE', 'UY', 'PY', 'CR', 'GT', 'PA', 'DO', 'HN', 'SV', 'NI', 'LATAM']);
+  const ZONAS = {
+    'America/Lima': 'PE', 'America/Bogota': 'CO', 'America/Santiago': 'CL', 'America/Mexico_City': 'MX', 'America/Monterrey': 'MX',
+    'America/Merida': 'MX', 'America/Cancun': 'MX', 'America/Chihuahua': 'MX', 'America/Hermosillo': 'MX', 'America/Tijuana': 'MX',
+    'America/Guayaquil': 'EC', 'America/La_Paz': 'BO', 'America/Caracas': 'VE', 'America/Montevideo': 'UY', 'America/Asuncion': 'PY',
+    'America/Costa_Rica': 'CR', 'America/Guatemala': 'GT', 'America/Panama': 'PA', 'America/Santo_Domingo': 'DO',
+    'America/Tegucigalpa': 'HN', 'America/El_Salvador': 'SV', 'America/Managua': 'NI', 'Europe/Madrid': 'ES', 'Atlantic/Canary': 'ES',
+  };
+  function detectarPais() {
+    const zona = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    if (ZONAS[zona]) return ZONAS[zona];
+    if (zona.startsWith('America/Argentina')) return 'AR';
+    const region = (navigator.languages || [navigator.language]).map((l) => (l || '').split('-')[1]?.toUpperCase()).find((r) => r && PAISES[r]);
+    return region || 'INT';
+  }
+  let miPais = almacen.leer('pais', null) || detectarPais();
+  const miIdioma = () => (HISPANOS.has(miPais) || miPais === 'ES' ? 'es' : 'en');
+  const nombrePais = (p) => PAISES[p] || p;
+  const paisesDisponibles = () => [...new Set(D.fuentes.map((f) => f.pais).filter((p) => p && PAISES[p]))].sort((a, b) => nombrePais(a).localeCompare(nombrePais(b), 'es'));
+
+  // Puntaje de recomendación: país (lo que más pesa), idioma, popularidad (vistas), frescura y variedad.
+  function puntaje(i) {
+    let s = 0;
+    if (i.pais === miPais) s += 5;
+    else if (HISPANOS.has(miPais) && HISPANOS.has(i.pais)) s += 1.5;
+    if (i.idioma === miIdioma()) s += 1.5;
+    s += i.vistas ? Math.log10(i.vistas + 1) * 0.9 : i.tipo === 'video' ? 1.2 : 1.8;
+    s += 2.5 * Math.exp(-(ahora() - i._fecha) / (45 * 864e5));
+    if (i.tipo === 'video') s += 0.4;
+    if (i.destacado) s += 2;
+    if (i.short) s -= 0.8; // los Shorts no dominan el inicio
+    return s;
+  }
+  // El orden recomendado de todo el catálogo se calcula una vez (y de nuevo solo si cambias de país);
+  // al filtrar se reutiliza ese orden en vez de volver a ordenar miles de recursos en cada clic.
+  let ordenRecomendadoCache = null;
+  function calcularPuntajes() {
+    for (const i of ITEMS) i._rec = puntaje(i);
+    ordenRecomendadoCache = null;
+  }
+  const ordenRecomendado = () => (ordenRecomendadoCache ??= diversificar([...ITEMS].sort((a, b) => b._rec - a._rec)));
+  calcularPuntajes();
+
+  // Variedad como en YouTube: cada recurso extra de una misma fuente pierde algo de puntaje
+  // y luego se evita que dos de la misma fuente queden seguidos. Recibe la lista ya ordenada por puntaje.
+  function diversificar(xs) {
+    const porFuente = new Map();
+    const salida = xs
+      .map((i) => {
+        const k = porFuente.get(i.fuenteId) ?? 0;
+        porFuente.set(i.fuenteId, k + 1);
+        return { i, s: i._rec - 0.7 * k };
+      })
+      .sort((a, b) => b.s - a.s)
+      .map((x) => x.i);
+    for (let n = 1; n < salida.length; n++) {
+      if (salida[n].fuenteId !== salida[n - 1].fuenteId) continue;
+      for (let m = n + 1; m < Math.min(n + 8, salida.length); m++) {
+        if (salida[m].fuenteId !== salida[n - 1].fuenteId) { salida.splice(n, 0, salida.splice(m, 1)[0]); break; }
+      }
+    }
+    return salida;
+  }
 
   // =====================================================================
   // Lo personal (este navegador)
@@ -215,7 +288,7 @@
   //   #/listas  #/lista/<ref>  #/ver/<ref>/<n>  #/guardados  #/vistos
   //   filtros: ?q=&tipo=&sector=&idioma=&fuente=&orden=&nuevos=   lista compartida: ?n=&i=
   // =====================================================================
-  const FILTROS_BASE = { q: '', tipo: 'todo', sector: 'todos', idioma: 'todos', fuente: 'todas', orden: 'recientes', nuevos: '' };
+  const FILTROS_BASE = { q: '', tipo: 'todo', sector: 'todos', idioma: 'todos', fuente: 'todas', orden: 'recomendados', nuevos: '' };
   const estado = { vista: 'inicio', id: null, pos: 0, compartida: null, ...FILTROS_BASE };
   const VISTAS = {
     c: 'categoria', s: 'sector', t: 'hashtag', f: 'fuente', explorar: 'explorar', categorias: 'explorar',
@@ -269,18 +342,31 @@
   const hayFiltros = () => Boolean(estado.q) || estado.tipo !== 'todo' || estado.idioma !== 'todos' || estado.fuente !== 'todas'
     || estado.sector !== 'todos' || Boolean(estado.nuevos);
   const cuantosFiltrosMovil = () => [estado.sector !== 'todos' && estado.vista !== 'sector', estado.idioma !== 'todos',
-    estado.fuente !== 'todas' && estado.vista !== 'fuente', estado.orden !== 'recientes', Boolean(estado.nuevos)].filter(Boolean).length;
+    estado.fuente !== 'todas' && estado.vista !== 'fuente', estado.orden !== 'recomendados', Boolean(estado.nuevos)].filter(Boolean).length;
 
   const PALABRAS_VACIAS = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'en', 'y', 'o', 'a', 'al', 'con', 'por', 'para', 'un', 'una', 'que', 'como', 'the', 'of', 'and', 'to', 'in']);
   function tokensDe(texto) {
     const todos = norm(texto).split(/[^a-z0-9]+/).filter(Boolean);
     const utiles = todos.filter((t) => !PALABRAS_VACIAS.has(t));
-    return (utiles.length ? utiles : todos).map((t) => (t.length > 4 ? t.replace(/(es|s)$/, '') : t)); // "arneses" encuentra "arnés"
+    return (utiles.length ? utiles : todos).map((t) => {
+      const raiz = t.length > 4 ? t.replace(/(es|s)$/, '') : t; // "arneses" encuentra "arnés"
+      return raiz.length >= 4 ? raiz : t;
+    });
   }
   const tokensBusqueda = () => tokensDe(estado.q);
-  // Temas cuyo nombre, descripción o palabras clave contienen lo buscado ("extintor" → Incendios y emergencias).
-  const CLAVES_CAT = new Map(D.categorias.map((c) => [c.id, norm([c.nombre, c.descripcion, ...(c.claves || [])].join(' | '))]));
-  const temasDeBusqueda = (tokens) => (tokens.length ? CATS_VISIBLES.filter((c) => tokens.every((t) => CLAVES_CAT.get(c.id).includes(t))) : []);
+  const escaparRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Cada palabra buscada debe ser el comienzo de una palabra del texto ("iperc" → "IPERC continuo").
+  // Las siglas cortas (ATS, EPP, RCP, 5S) deben coincidir completas para no aparecer dentro de otras palabras.
+  const patronesDe = (tokens) => tokens.map((t) => new RegExp(`(?<![a-z0-9])${escaparRe(t)}${t.length <= 3 ? '(?![a-z0-9])' : ''}`));
+  const enTitulo = (i, pats) => pats.every((p) => p.test(i._tit));
+  const coincide = (i, pats) => pats.every((p) => p.test(i._tit) || p.test(i._txt));
+  // Temas cuyo nombre o palabras clave contienen lo buscado ("extintor" → Prevención de incendios). Solo se sugieren.
+  const CLAVES_CAT = new Map(D.categorias.map((c) => [c.id, norm([c.nombre, ...(c.claves || [])].join(' | '))]));
+  const temasDeBusqueda = (tokens) => {
+    if (!tokens.length) return [];
+    const pats = patronesDe(tokens);
+    return CATS_VISIBLES.filter((c) => pats.every((p) => p.test(CLAVES_CAT.get(c.id)))).sort((a, b) => a.total - b.total);
+  };
 
   // =====================================================================
   // Elementos
@@ -348,7 +434,7 @@
   function pintarExtrasLateral() {
     const caja = $('#lateralExtra');
     if (!caja) return;
-    const botones = [];
+    const botones = [`<button type="button" class="nav-item" data-accion="elegir-pais">${svg('brujula', 'nav-ico')}<span class="nombre">Tu país: ${esc(nombrePais(miPais))}</span></button>`];
     if (puedeInstalar()) botones.push(`<button type="button" class="nav-item" data-accion="instalar">${svg('descargar', 'nav-ico')}<span class="nombre">Instalar la app</span></button>`);
     if (ocultos.size) botones.push(`<button type="button" class="nav-item" data-accion="restaurar-ocultos">${svg('ocultar', 'nav-ico')}<span class="nombre">Restaurar ocultos</span><span class="cuenta">${ocultos.size}</span></button>`);
     caja.innerHTML = botones.length ? `<p class="nav-titulo">Opciones</p>${botones.join('')}` : '';
@@ -512,9 +598,14 @@
         </div>
       </div>`;
     } else if (vista === 'inicio') {
-      const temas = temasDeBusqueda(tokensBusqueda()).slice(0, 6);
-      html = cabSimple(`Resultados para “${esc(q)}”`, 'Buscamos en títulos, descripciones, hashtags, fuentes y temas relacionados.') +
-        (temas.length ? `<div class="relacionadas relacionadas-busqueda"><span>Temas relacionados:</span>${temas.map((c) => chipCat(c)).join('')}</div>` : '');
+      if (busquedaAmpliada) {
+        html = cabSimple(`Sin coincidencias exactas para “${esc(q)}”`, 'Ningún título ni descripción lo menciona. Te mostramos recursos del tema relacionado:') +
+          `<div class="relacionadas relacionadas-busqueda">${busquedaAmpliada.map((c) => chipCat(c)).join('')}</div>`;
+      } else {
+        const temas = temasDeBusqueda(tokensBusqueda()).slice(0, 4);
+        html = cabSimple(`Resultados para “${esc(q)}”`, 'Recursos que lo mencionan en el título, la descripción o sus hashtags. Primero los que lo dicen en el título.') +
+          (temas.length ? `<div class="relacionadas relacionadas-busqueda"><span>Ver el tema completo:</span>${temas.map((c) => chipCat(c)).join('')}</div>` : '');
+      }
     } else if (vista === 'categoria') {
       html = cabeceraGrupo(CATS.get(estado.id), 'c', 'Tema');
     } else if (vista === 'sector') {
@@ -561,7 +652,9 @@
         <a class="pildora" href="#/s/${s.id}" style="--cat:${s.color}"><span class="pildora-icono" aria-hidden="true">${s.icono}</span>
           <span><b>${esc(s.nombre)}</b><small>${plural(s.total, 'recurso', 'recursos')}</small></span></a>`).join('')}</div>`) : '',
       tags.length ? seccion('Hashtags del momento', verTodo('#/explorar#hashtags', 'Ver todos'), `<div class="hashtags-fila">${tags.map((h) => chipHashtag(h.id, true)).join('')}</div>`) : '',
-      `<div class="seccion-titulo"><h2>${estado.nuevos ? 'Nuevo desde tu última visita' : 'Lo más reciente'}</h2></div>`,
+      `<div class="seccion-titulo"><h2>${estado.nuevos ? 'Nuevo desde tu última visita'
+        : estado.orden === 'recomendados' ? `Recomendados para ti · ${esc(nombrePais(miPais))}` : 'Todos los recursos'}</h2>
+        <button type="button" class="enlace-boton" data-accion="elegir-pais">${svg('brujula')} Cambiar país</button></div>`,
     ].join('');
   }
 
@@ -791,7 +884,7 @@
   function alcance() {
     let xs = visibles();
     const { vista, id } = estado;
-    if (vista === 'categoria') xs = xs.filter((i) => i.categorias.includes(id));
+    if (vista === 'categoria') { const temas = temasDe(id); xs = xs.filter((i) => i.categorias.some((c) => temas.has(c))); }
     else if (vista === 'sector') xs = xs.filter((i) => i.sectores.includes(id));
     else if (vista === 'hashtag') xs = xs.filter((i) => i.hashtags.includes(id));
     else if (vista === 'fuente') xs = xs.filter((i) => i.fuenteId === id);
@@ -802,28 +895,41 @@
     if (estado.idioma !== 'todos') xs = xs.filter((i) => i.idioma === estado.idioma);
     if (estado.fuente !== 'todas' && vista !== 'fuente') xs = xs.filter((i) => i.fuenteId === estado.fuente);
     const tokens = tokensBusqueda();
+    busquedaAmpliada = null;
     if (tokens.length) {
-      // Fuera de un tema, también entra lo que pertenece a un tema relacionado con la búsqueda.
-      const temas = new Set(vista === 'categoria' ? [] : temasDeBusqueda(tokens).map((c) => c.id));
-      xs = xs.filter((i) => tokens.every((t) => i._busq.includes(t)) || i.categorias.some((c) => temas.has(c)));
+      const pats = patronesDe(tokens);
+      const exactos = xs.filter((i) => coincide(i, pats));
+      if (exactos.length || vista === 'categoria') return exactos;
+      // Sin coincidencias exactas: se ofrece lo del tema relacionado, avisando en la cabecera.
+      const temas = temasDeBusqueda(tokens).slice(0, 3);
+      if (!temas.length) return [];
+      busquedaAmpliada = temas;
+      const ids = new Set(temas.flatMap((c) => [...temasDe(c.id)]));
+      return xs.filter((i) => i.categorias.some((c) => ids.has(c)));
     }
     return xs;
   }
+  let busquedaAmpliada = null;
 
   function ordenar(xs) {
     const copia = [...xs];
-    const porFecha = (a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : 0);
+    const porFecha = (a, b) => b._fecha - a._fecha;
     switch (estado.orden) {
-      case 'antiguos': return copia.sort((a, b) => porFecha(b, a));
+      case 'recientes': return estado.vista === 'vistos' ? copia.sort((a, b) => vistos[b.id] - vistos[a.id]) : copia.sort(porFecha);
+      case 'antiguos': return copia.sort((a, b) => a._fecha - b._fecha);
       case 'az': return copia.sort((a, b) => a.titulo.localeCompare(b.titulo, 'es'));
       case 'vistas': return copia.sort((a, b) => (b.vistas ?? -1) - (a.vistas ?? -1) || porFecha(a, b));
       default: {
         if (estado.vista === 'vistos') return copia.sort((a, b) => vistos[b.id] - vistos[a.id]);
         const tokens = tokensBusqueda();
-        if (!tokens.length) return copia.sort(porFecha);
-        // Primero lo que coincide en el título, luego en el texto y al final lo que solo comparte el tema.
-        const rango = (i) => (tokens.every((t) => i._tit.includes(t)) ? 0 : tokens.every((t) => i._busq.includes(t)) ? 1 : 2);
-        return copia.sort((a, b) => rango(a) - rango(b) || porFecha(a, b));
+        if (tokens.length && !busquedaAmpliada) {
+          // En una búsqueda: primero lo que lo dice en el título; después, lo recomendado.
+          const pats = patronesDe(tokens);
+          const rango = (i) => (enTitulo(i, pats) ? 0 : 1);
+          return copia.sort((a, b) => rango(a) - rango(b) || b._rec - a._rec);
+        }
+        const incluidos = new Set(copia);
+        return ordenRecomendado().filter((i) => incluidos.has(i));
       }
     }
   }
@@ -920,9 +1026,9 @@
       return;
     }
 
+    const base = alcance();
     pintarCabecera();
     pintarSeccionesInicio();
-    const base = alcance();
     el.herramientas.hidden = !base.length && !hayFiltros();
     pintarSegmentos(base);
     sincronizarControles();
@@ -1089,7 +1195,8 @@
       `<button type="button" class="chip-opcion" data-filtro="${clave}" data-valor="${esc(valor)}" aria-pressed="${String(estado[clave] === valor || (clave === 'vista' && modoVista === valor))}">${texto}</button>`).join('')}</div></div>`;
     const pintar = () => [
       estado.vista !== 'sector' && SECTORES_VISIBLES.length ? fila('Sector', 'sector', [['todos', 'Todos'], ...SECTORES_VISIBLES.map((s) => [s.id, `${s.icono} ${esc(s.nombre)}`])]) : '',
-      fila('Ordenar por', 'orden', [['recientes', 'Más recientes'], ['vistas', 'Más vistos'], ['antiguos', 'Más antiguos'], ['az', 'A–Z']]),
+      fila('Ordenar por', 'orden', [['recomendados', 'Recomendados'], ['recientes', 'Más recientes'], ['vistas', 'Más vistos'], ['antiguos', 'Más antiguos'], ['az', 'A–Z']]),
+      `<div class="filtro"><p class="filtro-titulo">Recomendaciones para</p><div class="filtro-ops"><button type="button" class="chip-opcion" data-accion="elegir-pais" aria-pressed="true">${esc(nombrePais(miPais))} · cambiar</button></div></div>`,
       new Set(ITEMS.map((i) => i.idioma)).size > 1 ? fila('Idioma', 'idioma', [['todos', 'Todos'], ['es', 'Español'], ['en', 'Inglés']]) : '',
       refVisita ? fila('Novedades', 'nuevos', [['', 'Todo'], ['1', `Solo nuevos (${cuantosNuevos()})`]]) : '',
       fila('Ver como', 'vista', [['grilla', 'Cuadrícula'], ['lista', 'Lista']]),
@@ -1154,6 +1261,25 @@
         ${navigator.share ? `<button type="button" class="menu-op" data-op="compartir-nativo">${svg('compartir')}<span>Más opciones…</span></button>` : ''}
       </div>`);
     el.hojaCuerpo._compartir = { titulo: l.nombre, texto: enlace ? l.nombre : textoDeLista(l), url: enlace || undefined };
+  }
+
+  // País para las recomendaciones: lo de ese país aparece primero.
+  function hojaPais() {
+    const conFuentes = new Set(paisesDisponibles());
+    const lista = Object.keys(PAISES).filter((p) => HISPANOS.has(p) || conFuentes.has(p)).filter((p) => p !== 'LATAM' && p !== 'EU' && p !== 'INT');
+    lista.sort((a, b) => (conFuentes.has(b) - conFuentes.has(a)) || nombrePais(a).localeCompare(nombrePais(b), 'es'));
+    abrirHoja('¿Desde qué país ves SST Hub?', `<p class="hoja-nota">Mostramos primero lo que más se ve en tu país y después lo demás. Lo detectamos solo; aquí puedes cambiarlo.</p>
+      <div class="filtro-ops">${lista.map((p) => `<button type="button" class="chip-opcion" data-pais="${p}" aria-pressed="${p === miPais}">${esc(nombrePais(p))}${conFuentes.has(p) ? '' : ''}</button>`).join('')}</div>`);
+  }
+
+  function cambiarPais(p) {
+    miPais = p;
+    almacen.guardar('pais', p);
+    calcularPuntajes();
+    cerrarHoja();
+    pintarExtrasLateral();
+    render();
+    aviso(`Recomendaciones para ${nombrePais(p)}.`);
   }
 
   function hojaNombreLista({ titulo, valor = '', boton, alGuardar }) {
@@ -1264,6 +1390,7 @@
     },
     'compartir-lista'() { hojaCompartirLista(obtenerLista(estado.id)); },
     instalar() { instalarApp(); },
+    'elegir-pais'() { hojaPais(); },
   };
 
   const OPERACIONES = {
@@ -1314,6 +1441,8 @@
     if (rep) { irAPosicion(estado.pos + (rep.dataset.rep === 'siguiente' ? 1 : -1)); return; }
     const ir = t.closest('[data-ir]');
     if (ir) { irAPosicion(Number(ir.dataset.ir)); return; }
+    const pais = t.closest('[data-pais]');
+    if (pais) { cambiarPais(pais.dataset.pais); return; }
     const accion = t.closest('[data-accion]');
     if (accion) ACCIONES[accion.dataset.accion]?.();
   });
@@ -1394,8 +1523,8 @@
     if (!esHashtag) {
       const fuentes = [...FUENTES.values()].filter((f) => norm(f.nombre).includes(t)).slice(0, 2);
       if (fuentes.length) grupos.push(['Fuentes', fuentes.map((f) => ({ href: `#/f/${f.id}`, html: `${avatarFuente(f.nombre)}<span>${esc(f.nombre)}</span><small>${nf.format(f.total)}</small>` }))]);
-      const tokens = tokensDe(t);
-      const recursos = visibles().filter((i) => tokens.every((x) => i._tit.includes(x))).slice(0, 5);
+      const pats = patronesDe(tokensDe(t));
+      const recursos = visibles().filter((i) => enTitulo(i, pats)).sort((a, b) => b._rec - a._rec).slice(0, 5);
       if (recursos.length) grupos.push(['Recursos', recursos.map((i) => ({ href: i.url, salida: i.id, html: `<span class="sug-mini">${imagenDe(i, 'sug-img')}</span><span class="sug-titulo">${esc(i.titulo)}</span>${svg('externo')}` }))]);
     }
     return grupos;
