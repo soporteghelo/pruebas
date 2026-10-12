@@ -1,0 +1,34 @@
+{
+  "name": "test-fatiga",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "preparar": "node scripts/preparar-mediapipe.mjs",
+    "dev": "npm run preparar && vite --port=3000 --host=0.0.0.0",
+    "dev:https": "npm run preparar && vite --port=3443 --host=0.0.0.0 --mode https",
+    "build": "npm run preparar && vite build",
+    "preview": "vite preview --port=4173 --host=0.0.0.0",
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "1.0.1",
+    "lucide-react": "^0.546.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.14",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-basic-ssl": "2.2.0",
+    "@vitejs/plugin-react": "^5.0.4",
+    "tailwindcss": "^4.1.14",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0",
+    "vite-plugin-pwa": "1.3.0",
+    "vitest": "5.0.2"
+  }
+}

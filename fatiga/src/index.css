@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  --color-marca-50: #eff6ff;
+  --color-marca-100: #dbeafe;
+  --color-marca-500: #3b82f6;
+  --color-marca-600: #2563eb;
+  --color-marca-700: #1d4ed8;
+  --color-marca-800: #1e40af;
+  --color-marca-900: #1e3a8a;
+  --color-verde: #16a34a;
+  --color-ambar: #f59e0b;
+  --color-rojo: #dc2626;
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+html, body, #root { min-height: 100%; }
+body {
+  background: #f1f5f9;
+  color: #0f172a;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Botones grandes, pensados para el pulgar */
+button { touch-action: manipulation; }
+
+/* Pantalla del PVT: sin zoom, sin selección, sin menú contextual */
+.pvt {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.cifras { font-variant-numeric: tabular-nums; }
+
+/* Video espejado para que la persona se vea como en un espejo */
+.espejo { transform: scaleX(-1); }
+
+@keyframes pulso {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.pulso { animation: pulso 1.4s ease-in-out infinite; }
