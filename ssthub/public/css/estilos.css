@@ -1082,3 +1082,5 @@ select option:disabled { color: #9AA0A8; }
   .hi-grid-3 { grid-template-columns: repeat(3, 1fr); }
   .campo.ancho-2 { grid-column: span 2; }
 }
+.aviso-ambito { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.aviso-ambito .boton svg { width: 16px; height: 16px; }

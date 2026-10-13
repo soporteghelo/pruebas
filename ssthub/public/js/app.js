@@ -433,7 +433,28 @@
   //    de las palabras y, al final, ofrece el tema relacionado (avisando en cada caso).
   const PALABRAS_VACIAS = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'en', 'y', 'o', 'a', 'al', 'con', 'por', 'para', 'un', 'una', 'que', 'como', 'se', 'su', 'the', 'of', 'and', 'to', 'in', 'for', 'on']);
   const SINONIMOS = [
-    ['loto', 'bloqueo y etiquetado', 'lockout', 'tagout'],
+    ['loto', 'bloqueo y etiquetado', 'lockout', 'tagout', 'candado de bloqueo', 'candados de bloqueo', 'aislamiento de energias', 'energias peligrosas', 'hazardous energy', 'lockout tagout'],
+    ['candado', 'candados', 'padlock', 'padlocks', 'candado de seguridad'],
+    ['tarjeta de bloqueo', 'tarjeta de peligro', 'tarjetas de bloqueo', 'danger tag', 'lockout tag'],
+    ['caja de bloqueo', 'lockbox', 'lock box', 'bloqueo grupal', 'group lockout'],
+    ['montacargas', 'forklift', 'carretilla elevadora', 'autoelevador', 'grua horquilla'],
+    ['andamio', 'andamios', 'scaffold', 'scaffolding'],
+    ['escalera', 'escaleras', 'ladder', 'ladders'],
+    ['linea de vida', 'lineas de vida', 'lifeline', 'anclaje', 'punto de anclaje', 'anchorage'],
+    ['detector de gases', 'detector de gas', 'monitor de gases', 'gas detector', 'medicion de gases'],
+    ['respirador', 'respiradores', 'mascarilla', 'proteccion respiratoria', 'respirator'],
+    ['casco', 'cascos', 'hard hat', 'proteccion de la cabeza'],
+    ['guantes', 'guante', 'gloves', 'proteccion de manos'],
+    ['tapones', 'orejeras', 'protector auditivo', 'proteccion auditiva', 'hearing protection', 'earplugs'],
+    ['soldadura', 'soldar', 'welding', 'oxicorte', 'corte y soldadura'],
+    ['izaje', 'izajes', 'rigging', 'lifting', 'grua', 'gruas', 'crane', 'aparejos'],
+    ['excavacion', 'excavaciones', 'zanja', 'zanjas', 'trench', 'trenching', 'excavation'],
+    ['electrocucion', 'choque electrico', 'arco electrico', 'arc flash', 'electrical shock'],
+    ['derrame', 'derrames', 'spill', 'spills'],
+    ['evacuacion', 'evacuar', 'evacuation', 'plan de evacuacion'],
+    ['simulacro', 'simulacros', 'drill', 'emergency drill'],
+    ['caida de rocas', 'desprendimiento de rocas', 'rockfall', 'desatado de rocas', 'sostenimiento'],
+    ['voladura', 'voladuras', 'blasting', 'explosivos', 'explosives'],
     ['epp', 'equipo de proteccion personal', 'equipos de proteccion personal', 'ppe', 'epi', 'elementos de proteccion personal'],
     ['rcp', 'reanimacion cardiopulmonar', 'cpr'],
     ['dea', 'desfibrilador', 'aed'],
@@ -491,7 +512,15 @@
   for (const grupo of SINONIMOS) for (const t of grupo) SINONIMOS_DE.set(t, [...new Set([...(SINONIMOS_DE.get(t) || []), ...grupo.filter((x) => x !== t)])]);
 
   const escaparRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const raizDe = (t) => { const r = t.length > 4 ? t.replace(/(es|s)$/, '') : t; return r.length >= 4 ? r : t; }; // "arneses" → "arnes"
+  // Raíz liviana del español: "arneses" → "arnes", "bloqueo" / "bloquear" / "bloqueados" → "bloque",
+  // "inspecciones" → "inspeccion". Nunca deja menos de 5 letras ni toca siglas ni palabras con números.
+  const SUFIJOS = ['amientos', 'imientos', 'amiento', 'imiento', 'aciones', 'iciones', 'mente', 'ados', 'adas', 'idos', 'idas',
+    'ado', 'ada', 'ido', 'ida', 'ar', 'er', 'ir', 'es', 'os', 'as', 's', 'o', 'a', 'e'];
+  const raizDe = (t) => {
+    if (t.length <= 4 || /\d/.test(t)) return t;
+    for (const suf of SUFIJOS) if (t.endsWith(suf) && t.length - suf.length >= 5) return t.slice(0, -suf.length);
+    return t;
+  };
   function palabrasDe(texto) {
     const todas = norm(texto).split(/[^a-z0-9]+/).filter(Boolean);
     const utiles = todas.filter((t) => !PALABRAS_VACIAS.has(t));
@@ -502,9 +531,12 @@
   // Patrón de un término (una palabra o una frase): cada palabra al comienzo de una palabra del texto;
   // las siglas cortas (ATS, EPP, RCP, 5S) deben coincidir completas.
   function patronTermino(termino) {
-    const ps = termino.split(' ').filter(Boolean).map(raizDe);
+    // Si la palabra se recortó a su raíz, después de la raíz tiene que seguir alguna letra:
+    // "bloqueo" encuentra "bloquear" y "bloqueados", pero no "Bloque: Drones".
+    const palabras = termino.split(' ').filter(Boolean);
+    const ps = palabras.map(raizDe);
     const ultima = ps.at(-1);
-    const cuerpo = ps.map(escaparRe).join('[\\s-]+');
+    const cuerpo = ps.map((r, k) => escaparRe(r) + (r !== palabras[k] ? '[a-z]+' : '')).join('[\\s-]+');
     return new RegExp(`(?<![a-z0-9])${cuerpo}${ultima.length <= 3 ? '(?![a-z0-9])' : ''}`);
   }
   const patronesDe = (tokens) => tokens.map(patronTermino);
@@ -612,18 +644,38 @@
     };
     const res = evaluar(b);
     const completos = res.filter((x) => x.r.completo);
-    if (completos.length) return { items: porPuntos(completos), modo: 'exacta', b };
+    // Si hay pocos exactos, se suman (debajo, separados) los parciales y lo del tema que más se relaciona.
+    const conRelacionados = (exactos, bb) => {
+      const items = porPuntos(exactos);
+      if (items.length >= 60) return { items, relacionados: null };
+      const ya = new Set(items);
+      const extra = [];
+      if (bb.terminos.length > 1) {
+        const parciales = evaluar(bb).filter((x) => !x.r.completo && x.r.encontrados >= Math.ceil(bb.terminos.length / 2));
+        extra.push(...porPuntos(parciales).filter((i) => !ya.has(i)));
+      }
+      const temas = temasDeBusqueda(tokensDe(texto)).slice(0, 2);
+      if (temas.length) {
+        const ids = new Set(temas.flatMap((c) => [...temasDe(c.id)]));
+        const yaExtra = new Set(extra);
+        // del tema, primero los que lo tienen como tema principal
+        const delTema = xs.filter((i) => !ya.has(i) && !yaExtra.has(i) && i.categorias.some((c) => ids.has(c)));
+        extra.push(...repartir(delTema, (i) => i._rec + (ids.has(i.categorias[0]) ? 3 : 0)));
+      }
+      return { items: [...items, ...extra], relacionados: extra.length ? { desde: extra[0], temas } : null };
+    };
+    if (completos.length) return { ...conRelacionados(completos, b), modo: 'exacta', b };
 
     const correccion = corregir(b.crudas);
     if (correccion) {
       const b2 = prepararBusqueda(correccion);
       const completos2 = evaluar(b2).filter((x) => x.r.completo);
-      if (completos2.length) return { items: porPuntos(completos2), modo: 'corregida', correccion, b: b2 };
+      if (completos2.length) return { ...conRelacionados(completos2, b2), modo: 'corregida', correccion, b: b2 };
     }
     if (b.terminos.length > 1) {
       const minimo = Math.ceil(b.terminos.length / 2);
       const parciales = res.filter((x) => x.r.encontrados >= minimo);
-      if (parciales.length) return { items: porPuntos(parciales), modo: 'parcial', b };
+      if (parciales.length) return { ...conRelacionados(parciales, b), modo: 'parcial', b };
     }
     if (permitirTema) {
       const temas = temasDeBusqueda(tokensDe(texto)).slice(0, 3);
@@ -651,7 +703,9 @@
       re.lastIndex = 0;
       for (let m = re.exec(normal); m; m = re.exec(normal)) {
         if (!m[0].length) { re.lastIndex++; continue; }
-        tramos.push([origen[m.index][0], origen[m.index + m[0].length - 1][1]]);
+        const ini = origen[m.index];
+        if (!ini) continue; // texto raro (emojis compuestos): no se resalta ese tramo
+        tramos.push([ini[0], (origen[m.index + m[0].length - 1] ?? [0, texto.length])[1]]);
       }
     }
     if (!tramos.length) return esc(texto);
@@ -672,7 +726,11 @@
   const temasDeBusqueda = (tokens) => {
     if (!tokens.length) return [];
     const pats = patronesDe(tokens);
-    return CATS_VISIBLES.filter((c) => pats.every((p) => p.test(CLAVES_CAT.get(c.id)))).sort((a, b) => a.total - b.total);
+    const todos = CATS_VISIBLES.filter((c) => pats.every((p) => p.test(CLAVES_CAT.get(c.id)))).sort((a, b) => a.total - b.total);
+    if (todos.length || pats.length < 2) return todos;
+    // Ninguno tiene todas las palabras: los que tienen la mayoría ("candado de bloqueo" → Bloqueo y etiquetado)
+    const n = (c) => pats.filter((p) => p.test(CLAVES_CAT.get(c.id))).length;
+    return CATS_VISIBLES.filter((c) => n(c) >= Math.ceil(pats.length / 2)).sort((a, b) => n(b) - n(a) || a.total - b.total);
   };
 
   // =====================================================================
@@ -900,7 +958,12 @@
       ? CATS_VISIBLES.filter((x) => x.grupo === c.grupo && x.id !== c.id).slice(0, 8).map((x) => chipCat(x)).join('')
       : SECTORES_VISIBLES.filter((x) => x.id !== c.id).slice(0, 8).map((x) => chipCat(x, 's')).join('');
     const grupo = base === 'c' ? GRUPOS.find((g) => g.id === c.grupo) : null;
-    const enBusqueda = estado.q ? `<p class="cab-stats">Buscando “${esc(estado.q)}” aquí. <a class="limpiar" href="#/?q=${encodeURIComponent(estado.q)}">Buscar en todo el portal</a></p>` : '';
+    let enBusqueda = '';
+    if (estado.q) {
+      const enTodo = buscarEn(visibles(), estado.q).items.length;
+      enBusqueda = `<p class="cab-stats aviso-ambito">Buscando “${esc(estado.q)}” solo en ${esc(c.nombre)}.
+        ${enTodo ? `<a class="boton boton-chico" href="#/?q=${encodeURIComponent(estado.q)}">Ver los ${nf.format(enTodo)} resultados de todo el portal ${svg('flecha')}</a>` : ''}</p>`;
+    }
     return `<div class="cab-cat" style="--cat:${c.color}">
       <span class="cab-icono" aria-hidden="true">${c.icono}</span>
       <div>
@@ -1642,7 +1705,9 @@
     const desde = mostrados;
     const lote = lista.slice(mostrados, mostrados + POR_PAGINA);
     const inicioAfuera = afuera?.clave === claveAfuera() ? afuera.inicio : -1;
-    el.grilla.insertAdjacentHTML('beforeend', lote.map((i, k) => (desde + k === inicioAfuera ? separadorAfuera() : '') + tarjeta(i)).join(''));
+    const primerRel = busqueda?.relacionados?.desde;
+    el.grilla.insertAdjacentHTML('beforeend', lote.map((i, k) => (desde + k === inicioAfuera ? separadorAfuera() : '')
+      + (i === primerRel ? separadorRelacionados() : '') + tarjeta(i)).join(''));
     mostrados += lote.length;
     // Si la pantalla es alta y aún no hay scroll, se carga otro lote (o se buscan más resultados afuera).
     requestAnimationFrame(() => {
@@ -1775,9 +1840,23 @@
   }
 
   // Traducción automática (inglés → español) de los resultados en vivo; si falla, quedan en inglés.
+  let traductorNavegador = null;
   async function traducirEnVivo(xs) {
     const textos = xs.flatMap((i) => [i.titulo, i.resumen || '']);
     if (!textos.length) return;
+    const marcar = (i, tit, res) => {
+      Object.assign(i, { tituloOriginal: i.titulo, titulo: tit, traducido: true, resumen: i.resumen ? res : i.resumen });
+      i._tit = norm(`${i.titulo} · ${i.tituloOriginal}`);
+    };
+    // 1) Traductor integrado de Chrome (gratis, funciona en el propio equipo), si ya está disponible
+    try {
+      if ('Translator' in self && (await self.Translator.availability({ sourceLanguage: 'en', targetLanguage: 'es' })) === 'available') {
+        traductorNavegador ??= await self.Translator.create({ sourceLanguage: 'en', targetLanguage: 'es' });
+        for (const i of xs) marcar(i, await traductorNavegador.translate(i.titulo), i.resumen ? await traductorNavegador.translate(i.resumen) : '');
+        return;
+      }
+    } catch { /* sigue con Google */ }
+    // 2) Servicio público de Google
     try {
       const cuerpo = new URLSearchParams({ q: textos.map((t) => t.replace(/\s*\n\s*/g, ' ').trim() || '-').join('\n') });
       const r = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=es&dt=t', { method: 'POST', body: cuerpo, signal: AbortSignal.timeout(10000) });
@@ -1799,6 +1878,11 @@
   const puedeBuscarAfuera = () => estado.vista === 'inicio' && Boolean(estado.q.trim()) && Boolean(busqueda?.b)
     && ['todo', 'video', 'articulo'].includes(estado.tipo) && plataformasAfuera().length > 0
     && estado.fuente === 'todas' && estado.sector === 'todos' && !estado.tags && !estado.nuevos;
+  const separadorRelacionados = () => {
+    const temas = busqueda?.relacionados?.temas || [];
+    return `<div class="separador-afuera"><span>${svg('brujula')} Más sobre ${temas.length ? temas.map((c) => `«${esc(c.nombre)}»`).join(' y ') : 'tu búsqueda'}</span>
+      <small>No dicen exactamente “${esc(estado.q)}”, pero tratan lo mismo.</small></div>`;
+  };
   const nombresAfuera = () => plataformasAfuera().map((f) => f.nombre).join(', ').replace(/, ([^,]*)$/, ' y $1');
   const separadorAfuera = () => `<div class="separador-afuera"><span>${svg('globo')} Más resultados en ${nombresAfuera()}</span>
     <small>Encontrados ahora mismo en sus buscadores; no forman parte de la biblioteca de SST Hub.</small></div>`;
@@ -1873,7 +1957,9 @@
     const tags = tagsElegidos().map((h) => `#${esc(HASHTAGS.get(h).etiqueta)}`).join(' + ');
     const deAfuera = afuera?.clave === claveAfuera() && afuera.inicio >= 0 ? lista.length - afuera.inicio : 0;
     const activos = filtrosActivos();
-    el.resultado.innerHTML = `<span class="resultado-n"><b>${plural(lista.length - deAfuera, 'recurso', 'recursos')}</b>${deAfuera ? ` + ${nf.format(deAfuera)} de otras plataformas` : ''}${donde}${tags ? ` · ${tags}` : ''}</span>`
+    const rel = busqueda?.relacionados ? lista.length - deAfuera - Math.max(0, lista.indexOf(busqueda.relacionados.desde)) : 0;
+    const exactos = rel && lista.includes(busqueda.relacionados.desde) ? lista.length - deAfuera - rel : lista.length - deAfuera;
+    el.resultado.innerHTML = `<span class="resultado-n"><b>${plural(exactos, 'recurso', 'recursos')}</b>${rel && lista.includes(busqueda.relacionados.desde) ? ` + ${nf.format(rel)} relacionados` : ''}${deAfuera ? ` + ${nf.format(deAfuera)} de otras plataformas` : ''}${donde}${tags ? ` · ${tags}` : ''}</span>`
       + (activos.length ? `<span class="filtros-activos">${activos.map(chipQuitar).join('')}</span>` : '')
       + (activos.length > 1 || (activos.length && tags) ? `<button type="button" class="limpiar" data-accion="limpiar">Quitar todos</button>` : '');
   }

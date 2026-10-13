@@ -15,6 +15,7 @@ import {
   oembedYoutube, buscarYoutube, detallesYoutube, leerMetaPagina, idVimeo, videosVimeo, videosDailymotion, videosArchive, baseWordpress, articulosWordpress, traducir,
 } from './lib/lectores.mjs';
 import { crearClasificador } from './lib/clasificador.mjs';
+import { traducirLocal } from './lib/traductor.mjs';
 import { crearEtiquetador, extraerHashtags, idHashtag } from './lib/hashtags.mjs';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -471,21 +472,25 @@ async function main() {
   }
 
   // 6b) Títulos y resúmenes en inglés traducidos al español (la web muestra la etiqueta "Traducido").
-  //     Las traducciones se guardan en data/traducciones.json: solo se traduce lo nuevo.
+  //     Se traduce en esta computadora con un modelo libre (scripts/lib/traductor.mjs); opciones.traductor = "google"
+  //     usa en cambio el servicio público de Google. Se guardan en data/traducciones.json: solo se traduce lo nuevo.
   const traducciones = await leerJson(RUTA_TRADUCCIONES, {});
-  const resumenCorto = (i) => (i.resumen ? textoPlano(i.resumen, 200) : '');
+  const resumenCorto = (i) => (i.resumen ? textoPlano(i.resumen, 200) : '').replace(/s+/g, ' ').trim();
+  const tituloLimpio = (i) => limpiarTitulo(i.titulo).replace(/s+/g, ' ').trim();
   if (opc.traducir !== false && !process.argv.includes('--sin-traducir')) { // también en --sin-red: solo usa el traductor
     const enIngles = publicados.filter((i) => i.idioma === 'en');
     // Primero los títulos (es lo que más se ve), después los resúmenes
-    const pendientes = [...new Set([...enIngles.map((i) => limpiarTitulo(i.titulo)), ...enIngles.map(resumenCorto)])]
+    const pendientes = [...new Set([...enIngles.map(tituloLimpio), ...enIngles.map(resumenCorto)])]
       .filter((t) => t && !(t in traducciones));
     if (pendientes.length) {
       let hechas = 0;
       try {
-        await traducir(pendientes, {
-          alTraducir: async (pares) => {
+        if (opc.traductor !== 'google') console.log(`  🌐 Traduciendo ${pendientes.length} textos en inglés con el modelo local (la primera vez tarda)…`);
+        await (opc.traductor === 'google' ? traducir : traducirLocal)(pendientes, {
+          alTraducir: async (pares, avance) => {
             for (const [t, x] of pares) traducciones[t] = x;
             hechas += pares.length;
+            if (avance && avance.hechos % 320 < 32) console.log(`     ${avance.hechos} de ${avance.total}`);
             await escribirJson(RUTA_TRADUCCIONES, traducciones, true);
           },
         });
@@ -568,7 +573,7 @@ async function main() {
       { id: 'manual', nombre: 'Recomendados', tipo: 'manual', idioma: 'es' },
     ].map((f) => ({ ...f, total: porFuente.get(f.id) ?? 0 })).filter((f) => f.total),
     items: publicados.map((i) => {
-      const titulo = limpiarTitulo(i.titulo);
+      const titulo = tituloLimpio(i);
       const resumen = resumenCorto(i);
       const tituloEs = i.idioma === 'en' ? traducciones[titulo] : null;
       return {
