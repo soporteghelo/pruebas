@@ -351,3 +351,50 @@ export async function articulosWordpress(base, { limite = 50, busqueda } = {}) {
     imagen: x.jetpack_featured_media_url || x.yoast_head_json?.og_image?.[0]?.url || null,
   }));
 }
+
+// Traducción con el servicio público de Google Translate (sin clave). Traduce por lotes: varios textos
+// separados por saltos de línea en un mismo pedido, con una pausa entre pedidos para no saturarlo.
+// Si un lote no vuelve con la misma cantidad de líneas, se parte en dos. Si Google bloquea (429 o la
+// página "sorry"), se lanza un error con bloqueado = true para que el recolector se detenga y siga otro día.
+const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
+async function traducirLote(textos, de, a) {
+  const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=${de}&tl=${a}&dt=t`, {
+    method: 'POST', body: new URLSearchParams({ q: textos.join('\n') }), redirect: 'manual', signal: AbortSignal.timeout(20000),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+  });
+  if (res.status === 429 || (res.status >= 300 && res.status < 400)) throw Object.assign(new Error('Google limitó las traducciones por un rato'), { bloqueado: true });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const datos = await res.json();
+  return (datos[0] || []).map((s) => s[0] || '').join('').split('\n').map((x) => x.trim());
+}
+async function traducirPartiendo(textos, de, a) {
+  await esperar(1200);
+  const trad = await traducirLote(textos, de, a);
+  if (trad.length === textos.length) return trad;
+  if (textos.length === 1) return [trad.join(' ')];
+  const mitad = Math.ceil(textos.length / 2);
+  return [...await traducirPartiendo(textos.slice(0, mitad), de, a), ...await traducirPartiendo(textos.slice(mitad), de, a)];
+}
+// Traduce y avisa cada lote terminado (alTraducir) para poder guardar el avance.
+export async function traducir(textos, { de = 'en', a = 'es', maxCaracteres = 4000, maxTextos = 50, alTraducir } = {}) {
+  const limpios = textos.map((t) => String(t || '').replace(/\s*\n\s*/g, ' ').trim()).filter(Boolean);
+  const salida = new Map();
+  let lote = [];
+  let largo = 0;
+  const vaciar = async () => {
+    if (!lote.length) return;
+    const actual = lote;
+    lote = [];
+    largo = 0;
+    const trad = await traducirPartiendo(actual, de, a);
+    actual.forEach((t, j) => { if (trad[j]) salida.set(t, trad[j]); });
+    await alTraducir?.(actual.map((t, j) => [t, trad[j]]).filter(([, x]) => x));
+  };
+  for (const t of limpios) {
+    if (largo + t.length > maxCaracteres || lote.length >= maxTextos) await vaciar();
+    lote.push(t);
+    largo += t.length + 1;
+  }
+  await vaciar();
+  return salida;
+}

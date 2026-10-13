@@ -1,5 +1,5 @@
 {
-  "_ayuda": "Listas destacadas que se arman solas en cada recolección. Reglas (todas opcionales): 'categorias', 'sectores' y 'hashtags' (basta con que el recurso tenga uno de cada lista indicada), 'grupo' (grupo de temas), 'tipo' (video | articulo | documento), 'idioma' (es | en), 'orden' (recientes | vistas), 'max'. 'enlaces' agrega URLs fijas al inicio de la lista. Una lista con menos de 3 recursos no se publica.",
+  "_ayuda": "Listas destacadas que se arman solas en cada recolección. Reglas (todas opcionales): 'categorias', 'sectores' y 'hashtags' (basta con que el recurso tenga uno de cada lista indicada), 'grupo' (grupo de temas), 'tipo' (video | articulo | documento), 'idioma' (es | en), 'orden' (recientes | vistas), 'max'. 'principal': true exige que ese sea el tema principal del recurso (no uno secundario). 'enlaces' agrega URLs fijas al inicio de la lista. Una lista con menos de 3 recursos no se publica.",
   "listas": [
     {
       "id": "induccion",
@@ -37,7 +37,7 @@
       "max": 20
     },
     {
-      "id": "metodos-investigacion",
+      "id": "metodos-investigacion", "principal": true,
       "nombre": "ICAM y métodos de investigación",
       "descripcion": "ICAM, TapRooT, árbol de causas, 5 porqués, Ishikawa y cómo investigar un incidente.",
       "icono": "🧩",
@@ -108,7 +108,7 @@
       "max": 20
     },
     {
-      "id": "iperc",
+      "id": "iperc", "principal": true,
       "nombre": "IPERC paso a paso",
       "descripcion": "Identificación de peligros, evaluación de riesgos y controles: IPERC línea base y continuo.",
       "icono": "🧮",

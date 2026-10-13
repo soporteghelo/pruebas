@@ -12,7 +12,7 @@ import {
 } from './lib/util.mjs';
 import {
   leerFeed, urlFeedYoutube, canalDe, listarPlaylist, listasDeCanal, playlistDeSubidas, idYoutube, miniaturaYoutube,
-  oembedYoutube, buscarYoutube, detallesYoutube, leerMetaPagina, idVimeo, videosVimeo, videosDailymotion, videosArchive, baseWordpress, articulosWordpress,
+  oembedYoutube, buscarYoutube, detallesYoutube, leerMetaPagina, idVimeo, videosVimeo, videosDailymotion, videosArchive, baseWordpress, articulosWordpress, traducir,
 } from './lib/lectores.mjs';
 import { crearClasificador } from './lib/clasificador.mjs';
 import { crearEtiquetador, extraerHashtags, idHashtag } from './lib/hashtags.mjs';
@@ -22,6 +22,7 @@ const R = (p) => path.join(RAIZ, p);
 const RUTA_BIBLIOTECA = R('data/biblioteca.json');
 const RUTA_SALIDA = R('public/data/contenido.js');
 const RUTA_CACHE_LISTAS = R('data/listas-canales.json');
+const RUTA_TRADUCCIONES = R('data/traducciones.json'); // inglés → español, para no traducir dos veces lo mismo
 const RUTA_WORDPRESS = R('data/wordpress.json'); // blogs con la API de WordPress abierta (la web busca en ellos en vivo)
 
 const esPdf = (u) => /\.pdf(\?|#|$)/i.test(u);
@@ -144,7 +145,7 @@ function armarListas(cfgListas, publicados, grupoDeTema, hijosDeTema) {
     // Un tema paraguas (p. ej. riesgos críticos) incluye a sus subtemas.
     const temas = l.categorias && new Set(l.categorias.flatMap((c) => [c, ...(hijosDeTema.get(c) ?? [])]));
     let candidatos = publicados.filter((i) =>
-      (!temas || i.categorias.some((c) => temas.has(c))) &&
+      (!temas || (l.principal ? temas.has(i.categorias[0]) : i.categorias.some((c) => temas.has(c)))) && // principal: que sea su tema principal
       (!l.sectores || i.sectores.some((s) => l.sectores.includes(s))) &&
       (!l.hashtags || i.hashtags.some((h) => reglaHashtags.includes(h))) &&
       (!l.grupo || i.categorias.some((c) => grupoDeTema.get(c) === l.grupo)) &&
@@ -469,6 +470,32 @@ async function main() {
     });
   }
 
+  // 6b) Títulos y resúmenes en inglés traducidos al español (la web muestra la etiqueta "Traducido").
+  //     Las traducciones se guardan en data/traducciones.json: solo se traduce lo nuevo.
+  const traducciones = await leerJson(RUTA_TRADUCCIONES, {});
+  const resumenCorto = (i) => (i.resumen ? textoPlano(i.resumen, 200) : '');
+  if (opc.traducir !== false && !process.argv.includes('--sin-traducir')) { // también en --sin-red: solo usa el traductor
+    const enIngles = publicados.filter((i) => i.idioma === 'en');
+    // Primero los títulos (es lo que más se ve), después los resúmenes
+    const pendientes = [...new Set([...enIngles.map((i) => limpiarTitulo(i.titulo)), ...enIngles.map(resumenCorto)])]
+      .filter((t) => t && !(t in traducciones));
+    if (pendientes.length) {
+      let hechas = 0;
+      try {
+        await traducir(pendientes, {
+          alTraducir: async (pares) => {
+            for (const [t, x] of pares) traducciones[t] = x;
+            hechas += pares.length;
+            await escribirJson(RUTA_TRADUCCIONES, traducciones, true);
+          },
+        });
+        console.log(`  🌐 Traducidos al español: ${hechas} textos en inglés`);
+      } catch (err) {
+        console.warn(`  ⚠ Traducción en pausa (${err.message}): ${hechas} de ${pendientes.length} listos; sigue en la próxima recolección.`);
+      }
+    }
+  }
+
   // 7) Duración y vistas de los videos (solo con clave de YouTube)
   if (claveYT) {
     const ids = publicados.filter((i) => i.ytId).map((i) => i.ytId).slice(0, 4000);
@@ -540,15 +567,21 @@ async function main() {
       { id: 'youtube', nombre: 'Otros canales de YouTube', tipo: 'youtube', idioma: 'es' },
       { id: 'manual', nombre: 'Recomendados', tipo: 'manual', idioma: 'es' },
     ].map((f) => ({ ...f, total: porFuente.get(f.id) ?? 0 })).filter((f) => f.total),
-    items: publicados.map((i) => ({
-      id: i.id, tipo: i.tipo, titulo: limpiarTitulo(i.titulo), url: i.url, miniatura: i.miniatura || undefined,
+    items: publicados.map((i) => {
+      const titulo = limpiarTitulo(i.titulo);
+      const resumen = resumenCorto(i);
+      const tituloEs = i.idioma === 'en' ? traducciones[titulo] : null;
+      return {
+      id: i.id, tipo: i.tipo, titulo: tituloEs || titulo, tituloOriginal: tituloEs ? titulo : undefined, traducido: tituloEs ? true : undefined,
+      url: i.url, miniatura: i.miniatura || undefined,
       ytId: i.ytId, embed: i.id.startsWith('dm-') ? EMBEDS.dailymotion(i.id.slice(3)) : i.embed, short: i.short, fuente: decodificar(i.fuente), fuenteId: i.fuenteId, idioma: i.idioma, pais: fuentesPorId.get(i.fuenteId)?.pais ?? undefined,
       fecha: i.fecha, agregado: i.agregado, duracion: i.duracion, vistas: i.vistas,
       categorias: i.categorias, sectores: i.sectores.length ? i.sectores : undefined,
       hashtags: i.hashtags.length ? i.hashtags : undefined,
-      resumen: i.resumen ? textoPlano(i.resumen, 200) : undefined,
+      resumen: (i.idioma === 'en' && traducciones[resumen]) || resumen || undefined,
       destacado: i.origen === 'manual' || undefined,
-    })),
+      };
+    }),
   };
   await fs.mkdir(path.dirname(RUTA_SALIDA), { recursive: true });
   const js = `// Generado por "npm run recolectar" el ${ahora}. No lo edites a mano.\nwindow.SST_DATOS = ${JSON.stringify(salida)};\n`;

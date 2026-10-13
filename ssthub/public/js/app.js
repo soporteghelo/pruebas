@@ -82,6 +82,9 @@
     copiar: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
     ocultar: '<circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/>',
     lapiz: '<path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    imprimir: '<path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v7H6z"/>',
+    megafono: '<path d="M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1zM15 9a3 3 0 0 1 0 6M18 6a7 7 0 0 1 0 12"/>',
+    medalla: '<circle cx="12" cy="9" r="6"/><path d="M8.5 14 7 22l5-3 5 3-1.5-8"/>',
     anterior: '<path d="M19 20 9 12l10-8zM5 19V5"/>',
     siguiente: '<path d="m5 4 10 8-10 8zM19 5v14"/>',
     whatsapp: '<path d="M3 21l1.7-5A8.5 8.5 0 1 1 8 19.3z"/><path d="M9 9.5c.3 1.8 1.7 3.6 3.5 4.5l1.3-1.1 2 1-.5 1.6c-3.3.5-7-3.1-6.7-6.3L10.2 8l1 2z"/>',
@@ -116,7 +119,7 @@
       _fecha: Date.parse(i.fecha) || 0,
       // El buscador mira título, descripción, hashtags y fuente. No usa los nombres de los temas:
       // así "IPERC" encuentra lo que habla de IPERC y no todo lo que está clasificado en ese tema.
-      _tit: norm(i.titulo),
+      _tit: norm(i.tituloOriginal ? `${i.titulo} · ${i.tituloOriginal}` : i.titulo),
       _tags: norm(hashtags.map((h) => `${h} ${HASHTAGS.get(h).etiqueta.replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2')}`).join(' · ')),
       _txt: norm(`${i.resumen || ''} · ${i.fuente}`),
     };
@@ -238,6 +241,7 @@
   let ocultos = new Set(almacen.leer('ocultos', []));
   let misListas = almacen.leer('listas', []);
   let modoVista = almacen.leer('vista', 'grilla');
+  let notas = almacen.leer('notas', {}); // { idRecurso: { texto, fecha } }: apuntes personales de cada video
   // Los videos de YouTube, Vimeo, Dailymotion e Internet Archive se ven dentro del portal (con el reproductor
   // oficial de cada uno). Se puede elegir abrirlos en su página. Abierto como archivo (doble clic) no se puede:
   // los reproductores no funcionan dentro de páginas sin dirección web.
@@ -365,8 +369,9 @@
   const VISTAS = {
     c: 'categoria', s: 'sector', t: 'hashtag', f: 'fuente', explorar: 'explorar', categorias: 'explorar',
     listas: 'listas', lista: 'lista', ver: 'ver', v: 'ver', guardados: 'guardados', vistos: 'vistos',
+    charla: 'charla', notas: 'notas', constancia: 'constancia',
   };
-  const VISTAS_CON_GRILLA = new Set(['inicio', 'categoria', 'sector', 'hashtag', 'fuente', 'guardados', 'vistos']);
+  const VISTAS_CON_GRILLA = new Set(['inicio', 'categoria', 'sector', 'hashtag', 'fuente', 'guardados', 'vistos', 'notas']);
   const POR_PAGINA = 24;
   let lista = [];
   let mostrados = 0;
@@ -384,6 +389,8 @@
     const validos = { categoria: CATS, sector: SECTORES, hashtag: HASHTAGS, fuente: FUENTES };
     if (validos[estado.vista] && !validos[estado.vista].has(estado.id)) { estado.vista = 'inicio'; estado.id = null; }
     if ((estado.vista === 'lista' || estado.vista === 'ver') && !obtenerLista(estado.id)) { estado.vista = 'listas'; estado.id = null; }
+    if (estado.vista === 'charla' && !POR_ID.has(estado.id) && !obtenerLista(estado.id)) { estado.vista = 'inicio'; estado.id = null; }
+    if (estado.vista === 'constancia' && !obtenerLista(estado.id)) { estado.vista = 'listas'; estado.id = null; }
   }
 
   function hashDe(e) {
@@ -391,7 +398,7 @@
       inicio: '/', categoria: `/c/${e.id}`, sector: `/s/${e.id}`, hashtag: `/t/${e.id}`, fuente: `/f/${e.id}`,
       explorar: '/explorar', listas: '/listas', lista: `/lista/${e.id}`,
       ver: e.id?.startsWith('r-') ? `/v/${e.id.slice(2)}${e.pos ? `/${e.pos}` : ''}` : `/ver/${e.id}/${e.pos || 0}`,
-      guardados: '/guardados', vistos: '/vistos',
+      guardados: '/guardados', vistos: '/vistos', notas: '/notas', charla: `/charla/${e.id}`, constancia: `/constancia/${e.id}`,
     }[e.vista];
     const p = new URLSearchParams();
     if (VISTAS_CON_GRILLA.has(e.vista)) {
@@ -704,6 +711,7 @@
         ${item('listas', '#/listas', svg('lista', 'nav-ico'), 'Mis listas', 'listas')}
         ${item('guardados', '#/guardados', svg('corazon', 'nav-ico'), 'Guardados', 'guardados')}
         ${item('vistos', '#/vistos', svg('reloj', 'nav-ico'), 'Vistos', 'vistos')}
+        ${item('notas', '#/notas', svg('lapiz', 'nav-ico'), 'Mis notas', 'notas')}
       </nav>
       ${SECTORES_VISIBLES.length ? `<p class="nav-titulo">Sectores</p>${SECTORES_VISIBLES.map(itemSector).join('')}` : ''}
       <p class="nav-titulo">Temas</p>
@@ -748,7 +756,7 @@
   function actualizarContadores() {
     const nGuardados = ITEMS.filter((i) => guardados.has(i.id)).length;
     const nVistos = ITEMS.filter((i) => vistos[i.id]).length;
-    const cuentas = { guardados: nGuardados, vistos: nVistos, listas: misListas.length };
+    const cuentas = { guardados: nGuardados, vistos: nVistos, listas: misListas.length, notas: ITEMS.filter((i) => notas[i.id]?.texto).length };
     for (const [clave, n] of Object.entries(cuentas)) $$(`[data-cuenta="${clave}"]`).forEach((x) => { x.textContent = n ? nf.format(n) : ''; });
     $$('[data-burbuja="guardados"]').forEach((b) => { b.hidden = !nGuardados; b.textContent = nGuardados > 99 ? '99+' : nGuardados; });
   }
@@ -838,7 +846,7 @@
     return `<article class="tarjeta${vistos[i.id] ? ' visto' : ''}" data-id="${i.id}">
       <a class="mini" ${enlace}${i.ytId ? ` data-yt="${esc(i.ytId)}"` : ''} style="--cat:${c0.color}" aria-label="${esc(i.titulo)}. ${verDentro(i) ? 'Ver aquí' : `Abrir en ${esc(destino)} (pestaña nueva)`}">
         ${imagenDe(i)}
-        <span class="sellos">${selloTipo(i)}${esNuevo(i) ? `<span class="sello sello-nuevo">Nuevo</span>` : ''}${i.destacado ? `<span class="sello sello-video sello-dest">${svg('estrella')} Recomendado</span>` : ''}</span>
+        <span class="sellos">${selloTipo(i)}${i.traducido ? `<span class="sello sello-traducido" title="Título original: ${esc(i.tituloOriginal || '')}">${svg('globo')} Traducido</span>` : ''}${esNuevo(i) ? `<span class="sello sello-nuevo">Nuevo</span>` : ''}${i.destacado ? `<span class="sello sello-video sello-dest">${svg('estrella')} Recomendado</span>` : ''}</span>
         ${i.duracion ? `<span class="sello sello-dur">${duracion(i.duracion)}</span>` : ''}
         <span class="sello sello-visto">${svg('check')} Visto</span>
         <span class="mini-salida">${verDentro(i) ? `${svg('play', 'relleno')} Ver aquí` : `${svg('externo')} Abrir en ${esc(destino)}`}</span>
@@ -867,13 +875,16 @@
     return `<span class="mosaico" style="--cat:${color}">${celdas.join('')}</span>`;
   }
 
+  const barraAvance = (n, total) => `<span class="barra-avance" title="${n} de ${total} vistos"><i style="width:${Math.round((100 * n) / Math.max(1, total))}%"></i></span>`;
+
   function tarjetaLista(l) {
     const items = itemsDeLista(l);
     const subtitulo = l.tipo === 'mia' ? `Tu lista · ${haceCuanto(l.actualizada)}` : esc(l.descripcion || '');
     return `<a class="lista-card" href="#/lista/${l.ref}" style="--cat:${l.color}">
       <span class="lista-portada">${mosaico(items, l.color)}<span class="lista-cuenta">${svg('lista')}${nf.format(items.length)}</span>
         <span class="lista-play">${svg('play')} Ver lista</span></span>
-      <span class="lista-info"><b><span aria-hidden="true">${l.icono}</span> ${esc(l.nombre)}</b><small>${subtitulo}</small></span>
+      <span class="lista-info"><b><span aria-hidden="true">${l.icono}</span> ${esc(l.nombre)}</b><small>${subtitulo}</small>
+        ${items.some((i) => vistos[i.id]) ? barraAvance(items.filter((i) => vistos[i.id]).length, items.length) : ''}</span>
     </a>`;
   }
 
@@ -937,14 +948,7 @@
       } else if (busqueda?.modo === 'parcial') {
         html = cabSimple(`Resultados para “${esc(q)}”`, `Ningún recurso tiene todas las palabras; mostramos los que tienen la mayoría. Prueba con menos palabras, por ejemplo ${otra(busqueda.b.crudas[0])}.`);
       } else {
-        const porTema = new Map();
-        for (const i of ambito) for (const c of i.categorias) porTema.set(c, (porTema.get(c) ?? 0) + 1);
-        const afinar = [...porTema].filter(([c, n]) => CATS.has(c) && n >= 2 && n < ambito.length).sort((a, b) => b[1] - a[1]).slice(0, 8);
-        html = cabSimple(`Resultados para “${esc(q)}”`, 'Recursos que lo mencionan en el título, la descripción o sus hashtags, repartidos entre plataformas y fuentes. Al final de la lista seguimos buscando en blogs, Dailymotion e Internet Archive.') +
-          (afinar.length ? `<div class="relacionadas relacionadas-busqueda"><span>Afinar por tema:</span>${afinar.map(([c, n]) => {
-            const x = CATS.get(c);
-            return `<a class="chip chip-cat" href="#/c/${c}?q=${encodeURIComponent(q)}" style="--cat:${x.color}"><span aria-hidden="true">${x.icono}</span>${esc(x.nombre)}<small>${nf.format(n)}</small></a>`;
-          }).join('')}</div>` : '');
+        html = cabSimple(`Resultados para “${esc(q)}”`, 'Repartidos entre plataformas y fuentes. Al final seguimos buscando en blogs, Dailymotion e Internet Archive.');
       }
     } else if (vista === 'categoria') {
       html = cabeceraGrupo(CATS.get(estado.id), 'c', 'Tema');
@@ -963,6 +967,8 @@
     } else if (vista === 'guardados') {
       html = cabSimple('Guardados', 'Tu lista personal. Se guarda en este navegador, sin cuentas ni contraseñas.',
         `<a class="boton boton-sec" href="#/listas">${svg('lista')} Mis listas</a>`);
+    } else if (vista === 'notas') {
+      html = cabSimple('Mis notas', 'Los videos en los que apuntaste algo: ideas para tu charla, compromisos, dudas. Se guardan en este navegador.');
     } else if (vista === 'vistos') {
       const hay = ITEMS.some((i) => vistos[i.id]);
       html = cabSimple('Vistos recientemente', 'Lo que abriste desde aquí, para volver a encontrarlo.',
@@ -985,7 +991,17 @@
     const listas = [...LISTAS_DEST.keys()].map((id) => obtenerLista(`d-${id}`));
     const temas = [...CATS_VISIBLES].sort((a, b) => b.total - a.total).slice(0, 12);
     const tags = (D.hashtags || []).slice(0, 24);
+    const listaCharla = [...LISTAS_DEST.keys()].find((k) => /charla/.test(k)) ?? [...LISTAS_DEST.keys()][0];
+    const ventajas = [
+      ['megafono', 'Tu charla de 5 minutos, lista', 'Elige un video o una lista y obtén la guía, las preguntas y el registro de asistencia para imprimir.', listaCharla ? `#/charla/d-${listaCharla}` : '#/listas'],
+      ['brujula', 'Todo en un solo lugar', `YouTube, Vimeo, Dailymotion, Internet Archive y ${nf.format(D.fuentes.filter((f) => f.tipo === 'rss').length)} blogs, repartidos por igual.`, '#/explorar'],
+      ['globo', 'Traducido al español', 'Lo que está en inglés lo ves en español, con la etiqueta «Traducido».', '#/?idioma=en'],
+      ['lapiz', 'Notas y constancias', 'Apunta ideas en cada video y descarga la constancia de avance de cada lista.', '#/listas'],
+      ['estrella', 'Solo seguridad laboral', `Ordenado en ${CATS_VISIBLES.length} temas SSOMA y ${SECTORES_VISIBLES.length} sectores. Nada de música ni entretenimiento.`, '#/explorar'],
+    ];
     el.secciones.innerHTML = [
+      seccion('Lo que YouTube no te da', '', `<div class="ventajas">${ventajas.map(([icono, titulo, texto, href]) =>
+        `<a class="ventaja" href="${href}"><span class="ventaja-ico">${svg(icono)}</span><b>${titulo}</b><small>${texto}</small></a>`).join('')}</div>`),
       listas.length ? seccion('Listas para tu próxima charla', verTodo('#/listas', 'Ver listas'), `<div class="carrusel carrusel-listas">${listas.map(tarjetaLista).join('')}</div>`) : '',
       seccion('Explora por tema', verTodo('#/explorar', `Ver los ${CATS_VISIBLES.length} temas`), `<div class="carrusel">${temas.map((c) => tile(c)).join('')}</div>`),
       SECTORES_VISIBLES.length ? seccion('¿En qué sector trabajas?', '', `<div class="pildoras">${SECTORES_VISIBLES.map((s) => `
@@ -1040,8 +1056,11 @@
     const deYoutube = videos.filter((i) => i.ytId);
     const total = items.reduce((s, i) => s + (i.duracion || 0), 0);
     const etiqueta = { mia: 'Tu lista', destacada: 'Lista destacada', compartida: 'Lista compartida' }[l.tipo];
+    const vistosDeLista = items.filter((i) => vistos[i.id]).length;
     const acciones = [
       items.length ? `<a class="boton" href="#/ver/${l.ref}/0${l.ref === 'c' ? hashDe({ ...estado, vista: 'lista' }).replace(/^[^?]*/, '') : ''}">${svg('play')} Ver lista</a>` : '',
+      items.length ? `<a class="boton boton-sec" href="#/charla/${l.ref}">${svg('megafono')} Preparar charla</a>` : '',
+      vistosDeLista ? `<a class="boton boton-sec" href="#/constancia/${l.ref}">${svg('medalla')} Constancia de avance</a>` : '',
       deYoutube.length ? `<a class="boton boton-sec" href="${urlYoutubeDeLista(deYoutube)}" target="_blank" rel="noopener noreferrer">${svg('externo')} Reproducir en YouTube</a>` : '',
       items.length ? `<button type="button" class="boton boton-sec" data-accion="compartir-lista">${svg('compartir')} Compartir</button>` : '',
       l.editable ? `<button type="button" class="boton boton-sec" data-accion="renombrar-lista">${svg('lapiz')} Renombrar</button>
@@ -1056,7 +1075,7 @@
         <h1><span aria-hidden="true">${l.icono}</span> ${esc(l.nombre)}</h1>
         ${l.descripcion ? `<p>${esc(l.descripcion)}</p>` : ''}
         <p class="cab-stats"><span><b>${nf.format(items.length)}</b> recursos</span>${videos.length ? `<span>${plural(videos.length, 'video', 'videos')}</span>` : ''}
-          ${total ? `<span>${duracionTotal(total)}</span>` : ''}${faltan ? `<span>${plural(faltan, 'recurso ya no está disponible', 'recursos ya no están disponibles')}</span>` : ''}</p>
+          ${total ? `<span>${duracionTotal(total)}</span>` : ''}${items.length ? `<span class="avance">${barraAvance(vistosDeLista, items.length)} ${nf.format(vistosDeLista)} de ${nf.format(items.length)} vistos</span>` : ''}${faltan ? `<span>${plural(faltan, 'recurso ya no está disponible', 'recursos ya no están disponibles')}</span>` : ''}</p>
         <div class="acciones">${acciones}</div>
       </div>
     </div>`;
@@ -1289,12 +1308,14 @@
     const guardado = guardados.has(i.id);
     $('#repInfo').innerHTML = `
       <h1 class="rep-titulo">${esc(i.titulo)}</h1>
+      ${i.traducido ? `<p class="rep-traducido"><span class="sello sello-traducido">${svg('globo')} Traducido</span> Traducción automática del inglés. Original: <i>${esc(i.tituloOriginal)}</i></p>` : ''}
       <div class="meta">${avatarFuente(i.fuente)}<a class="fuente" href="#/f/${esc(i.fuenteId)}">${esc(i.fuente)}</a><span class="punto">·</span>
         <time datetime="${i.fecha}">${haceCuanto(i.fecha)}</time>${i.vistas ? `<span class="punto">·</span><span>${compacto.format(i.vistas)} vistas</span>` : ''}</div>
       <div class="rep-controles">
         <button type="button" class="boton boton-sec" data-rep="anterior" ${estado.pos === 0 ? 'disabled' : ''}>${svg('anterior')} Anterior</button>
         <button type="button" class="boton" data-rep="siguiente" ${sig ? '' : 'disabled'}>Siguiente ${svg('siguiente')}</button>
         ${i.ytId || !reproducible(i) ? `<label class="interruptor"><input type="checkbox" id="repAuto" ${avanceAutomatico ? 'checked' : ''}><span></span>Avance automático</label>` : ''}
+        <a class="boton boton-sec" href="#/charla/${i.id}">${svg('megafono')} Preparar charla</a>
         <span class="rep-separador"></span>
         <button type="button" class="icono-btn fav-btn${guardado ? ' activo' : ''}" data-fav="${i.id}" aria-pressed="${guardado}" aria-label="${guardado ? 'Quitar de guardados' : 'Guardar'}">${svg('corazon')}</button>
         <a class="icono-btn" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer" data-salida="${i.id}" aria-label="Abrir en ${esc(destino)}" title="Abrir en ${esc(destino)}">${svg('externo')}</a>
@@ -1302,7 +1323,13 @@
       </div>
       <p class="rep-nota">Sigue explorando: el video continúa en una ventanita mientras navegas.</p>
       <div class="etiquetas">${i.categorias.map((c) => chipCat(CATS.get(c))).join('')}${i.hashtags.map((h) => chipHashtag(h)).join('')}</div>
-      ${i.resumen ? `<p class="rep-resumen">${esc(i.resumen)}</p>` : ''}`;
+      ${i.resumen ? `<p class="rep-resumen">${esc(i.resumen)}</p>` : ''}
+      <section class="rep-notas">
+        <div class="rep-notas-cab"><h2>${svg('lapiz')} Mis notas</h2>
+          ${i.ytId ? `<button type="button" class="boton boton-sec boton-chico" data-nota-minuto>${svg('reloj')} Marcar minuto actual</button>` : ''}</div>
+        <textarea id="notaTexto" data-nota="${i.id}" rows="4" placeholder="Apunta ideas para tu charla, compromisos o dudas. Se guardan solo en este navegador.">${esc(notas[i.id]?.texto || '')}</textarea>
+        <small class="rep-notas-estado" id="notaEstado">${notas[i.id]?.fecha ? `Guardado ${haceCuanto(new Date(notas[i.id].fecha).toISOString())}` : ''}</small>
+      </section>`;
 
     $('#repCola').innerHTML = `
       <header><div><b>${esc(l.nombre)}</b><span>${l.tipo === 'relacionados' ? esc(l.descripcion) : `${estado.pos + 1} de ${items.length}`}</span></div>${l.tipo === 'relacionados' ? '' : `<a href="#/lista/${l.ref}${sufijo}">Ver lista</a>`}</header>
@@ -1313,6 +1340,123 @@
     $('#repCola li[aria-current]')?.scrollIntoView({ block: 'nearest' });
     document.title = `${i.titulo} · ${l.nombre} · SST Hub`;
     requestAnimationFrame(ubicarFlotante);
+  }
+
+  // =====================================================================
+  // Kit de charla de 5 minutos: guía para el capacitador y registro de asistencia (formato de la
+  // RM 050-2013-TR: registro de inducción, capacitación, entrenamiento y simulacros de emergencia).
+  // =====================================================================
+  let datosCharla = almacen.leer('charla', {});
+  const hoyTexto = () => new Date().toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const qrDe = (url) => `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=0&data=${encodeURIComponent(url)}`;
+
+  function contenidoCharla() {
+    const unico = POR_ID.get(estado.id);
+    const l = unico ? null : obtenerLista(estado.id);
+    const items = unico ? [unico] : itemsDeLista(l).slice(0, (datosCharla.tipo || 'charla') === 'charla' ? 4 : 8); // 5 minutos no dan para más
+    const conteo = new Map();
+    for (const i of items) for (const c of i.categorias) conteo.set(c, (conteo.get(c) ?? 0) + 1);
+    const tema = CATS.get([...conteo].sort((a, b) => b[1] - a[1])[0]?.[0]) || CAT_RESPALDO;
+    const titulo = datosCharla.titulo?.[estado.id] || (unico ? unico.titulo : l.nombre);
+    const nombreTema = String(tema.nombre).toLowerCase();
+    return {
+      unico, l, items, tema, titulo,
+      objetivo: `Que cada participante reconozca los peligros de ${nombreTema} en su trabajo, sepa qué controles aplicar y asuma un compromiso concreto hoy.`,
+      puntos: String(tema.descripcion || '').replace(/\.$/, '').split(/,\s*|\s+y\s+/).map((x) => x.trim()).filter((x) => x.length > 3).slice(0, 6),
+      preguntas: [
+        '¿Dónde podría pasarnos algo así en nuestra área o frente de trabajo?',
+        '¿Qué control crítico evitaría el accidente? ¿Lo estamos aplicando hoy?',
+        `¿Qué condición o conducta insegura de ${nombreTema} vimos esta semana?`,
+        '¿Qué haríamos si ocurre una emergencia de este tipo? ¿Quién avisa y a quién?',
+        '¿Qué compromiso asumimos como equipo desde hoy?',
+      ],
+    };
+  }
+
+  function pintarCharla() {
+    const k = contenidoCharla();
+    const d = datosCharla;
+    const tipo = d.tipo || 'charla';
+    const filas = Number(d.filas) || 15;
+    const campo = (clave, etiqueta, clase = '') => `<label class="campo ${clase}"><span>${etiqueta}</span><input data-charla="${clave}" value="${esc(d[clave] || '')}" autocomplete="off"></label>`;
+    const marca = (valor, texto) => `<span class="marca${tipo === valor || (tipo === 'charla' && valor === 'capacitacion') ? ' activa' : ''}">${texto}</span>`;
+    el.cabecera.innerHTML = '';
+    el.secciones.innerHTML = `
+      <div class="charla-barra no-imprimir">
+        <div><p class="migas"><a href="${k.unico ? `#/v/${k.unico.id}` : `#/lista/${k.l.ref}`}">${esc(k.unico ? 'Video' : k.l.nombre)}</a> › Preparar charla</p>
+          <h1>${svg('megafono')} Kit de charla</h1>
+          <p>Completa los datos de tu empresa (se recuerdan para la próxima vez), imprime o guarda en PDF y llévalo a tu charla.</p></div>
+        <div class="charla-opciones">
+          <label class="select"><select data-charla="tipo">${[['charla', 'Charla de 5 minutos'], ['induccion', 'Inducción'], ['capacitacion', 'Capacitación'], ['entrenamiento', 'Entrenamiento'], ['simulacro', 'Simulacro de emergencia']]
+            .map(([v, t]) => `<option value="${v}"${v === tipo ? ' selected' : ''}>${t}</option>`).join('')}</select>${svg('abajo')}</label>
+          <label class="select"><select data-charla="filas">${[10, 15, 20, 25, 30].map((n) => `<option value="${n}"${n === filas ? ' selected' : ''}>${n} participantes</option>`).join('')}</select>${svg('abajo')}</label>
+          <button type="button" class="boton boton-sec" data-accion="copiar-charla">${svg('compartir')} Copiar para WhatsApp</button>
+          <button type="button" class="boton" data-accion="imprimir">${svg('imprimir')} Imprimir o guardar PDF</button>
+        </div>
+      </div>
+
+      <article class="hoja-impresion">
+        <header class="hi-cab"><div><small>${tipo === 'charla' ? 'CHARLA DE 5 MINUTOS' : 'GUÍA DE ' + ({ induccion: 'INDUCCIÓN', capacitacion: 'CAPACITACIÓN', entrenamiento: 'ENTRENAMIENTO', simulacro: 'SIMULACRO' }[tipo] || 'CAPACITACIÓN')} · GUÍA DEL CAPACITADOR</small>
+          <h2 contenteditable="true" data-charla-titulo spellcheck="false">${esc(k.titulo)}</h2></div>
+          <div class="hi-tema" style="--cat:${k.tema.color}"><span>${k.tema.icono}</span>${esc(k.tema.nombre)}</div></header>
+        <div class="hi-grid">
+          ${campo('empresa', 'Empresa')}${campo('lugar', 'Área / frente de trabajo')}
+          <label class="campo"><span>Fecha</span><input data-charla="fecha" value="${esc(d.fecha || hoyTexto())}"></label>${campo('capacitador', 'Capacitador')}
+        </div>
+        <section><h3>Objetivo</h3><p>${esc(k.objetivo)}</p></section>
+        ${k.puntos.length ? `<section><h3>Puntos que no pueden faltar</h3><ul class="hi-check">${k.puntos.map((p) => `<li>${esc(p[0].toUpperCase() + p.slice(1))}</li>`).join('')}</ul></section>` : ''}
+        <section><h3>Material de apoyo</h3><div class="hi-recursos">${k.items.map((i) => `
+          <div class="hi-recurso"><img src="${qrDe(i.url)}" alt="Código QR del recurso">
+            <div><b>${esc(i.titulo)}</b><small>${esc(i.fuente)} · ${esc(destinoDe(i))}${i.duracion ? ` · ${duracion(i.duracion)}` : ''}</small><small class="hi-url">${esc(i.url)}</small>
+            ${i.resumen ? `<p>${esc(i.resumen)}</p>` : ''}</div></div>`).join('')}</div></section>
+        <section><h3>Preguntas para conversar</h3><ol class="hi-preguntas">${k.preguntas.map((p) => `<li>${esc(p)}</li>`).join('')}</ol></section>
+        <section><h3>Compromisos del equipo</h3><div class="hi-lineas"><i></i><i></i><i></i></div></section>
+      </article>
+
+      <article class="hoja-impresion hoja-registro">
+        <header class="hi-cab"><div><small>FORMATO REFERENCIAL · RM 050-2013-TR</small><h2>Registro de inducción, capacitación, entrenamiento y simulacros de emergencia</h2></div></header>
+        <div class="hi-grid hi-grid-3">
+          ${campo('empresa', 'Razón social o denominación social')}${campo('ruc', 'RUC')}${campo('domicilio', 'Domicilio (dirección, distrito, departamento, provincia)', 'ancho-2')}
+          ${campo('actividad', 'Actividad económica')}${campo('trabajadores', 'N° de trabajadores en el centro laboral')}
+        </div>
+        <div class="hi-marcas"><b>Marcar (X):</b>${marca('induccion', 'Inducción')}${marca('capacitacion', 'Capacitación')}${marca('entrenamiento', 'Entrenamiento')}${marca('simulacro', 'Simulacro de emergencia')}</div>
+        <div class="hi-grid hi-grid-3">
+          <label class="campo ancho-2"><span>Tema</span><input value="${esc(k.titulo)}" data-charla-tema></label>
+          ${campo('horas', 'N° de horas')}${campo('capacitador', 'Nombre del capacitador o entrenador', 'ancho-2')}
+          <label class="campo"><span>Fecha</span><input data-charla="fecha" value="${esc(d.fecha || hoyTexto())}"></label>
+        </div>
+        <table class="hi-tabla"><thead><tr><th>N°</th><th>Apellidos y nombres de los capacitados</th><th>N° DNI</th><th>Área</th><th>Firma</th><th>Observaciones</th></tr></thead>
+          <tbody>${Array.from({ length: filas }, (_, n) => `<tr><td>${n + 1}</td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table>
+        <div class="hi-firmas"><div><i></i><span>Capacitador / entrenador</span></div><div><i></i><span>Responsable del registro (nombre, cargo, fecha y firma)</span></div></div>
+      </article>`;
+    document.title = `Charla: ${k.titulo} · SST Hub`;
+  }
+
+  // Constancia de autoaprendizaje de una lista (lo que viste de ella, con fechas)
+  function pintarConstancia() {
+    const l = obtenerLista(estado.id);
+    const items = itemsDeLista(l);
+    const vistosL = items.filter((i) => vistos[i.id]).sort((a, b) => vistos[a.id] - vistos[b.id]);
+    const fecha = (t) => new Date(t).toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' });
+    const minutos = vistosL.reduce((s, i) => s + (i.duracion || 0), 0) / 60;
+    el.cabecera.innerHTML = '';
+    el.secciones.innerHTML = `
+      <div class="charla-barra no-imprimir">
+        <div><p class="migas"><a href="#/lista/${l.ref}">${esc(l.nombre)}</a> › Constancia</p><h1>${svg('medalla')} Constancia de avance</h1>
+          <p>Escribe tu nombre y guárdala en PDF. Incluye los recursos de esta lista que abriste desde SST Hub.</p></div>
+        <div class="charla-opciones"><button type="button" class="boton" data-accion="imprimir">${svg('imprimir')} Imprimir o guardar PDF</button></div>
+      </div>
+      <article class="hoja-impresion constancia" style="--cat:${l.color}">
+        <small class="constancia-sello">SST Hub · Seguridad y salud en el trabajo</small>
+        <h2>Constancia de autoaprendizaje</h2>
+        <p>Se deja constancia de que</p>
+        <input class="constancia-nombre" data-charla="nombre" value="${esc(datosCharla.nombre || '')}" placeholder="Escribe tu nombre completo">
+        <p>revisó <b>${nf.format(vistosL.length)} de ${nf.format(items.length)}</b> recursos de la ruta <b>«${esc(l.nombre)}»</b>${vistosL.length ? ` entre el ${fecha(vistos[vistosL[0].id])} y el ${fecha(vistos[vistosL.at(-1).id])}` : ''}${minutos >= 1 ? `, con aproximadamente ${nf.format(Math.round(minutos))} minutos de video` : ''}.</p>
+        ${barraAvance(vistosL.length, items.length)}
+        <ol class="constancia-lista">${vistosL.map((i) => `<li><b>${esc(i.titulo)}</b><small>${esc(i.fuente)} · visto el ${fecha(vistos[i.id])}</small></li>`).join('')}</ol>
+        <p class="constancia-nota">Generada el ${fecha(Date.now())}. Es un registro personal de autoaprendizaje; no reemplaza una capacitación ni una certificación oficial.</p>
+      </article>`;
+    document.title = `Constancia: ${l.nombre} · SST Hub`;
   }
 
   function pantallaAfuera(i, motivo, esArticulo = false) {
@@ -1347,6 +1491,7 @@
     else if (vista === 'fuente') xs = xs.filter((i) => i.fuenteId === id);
     else if (vista === 'guardados') xs = ITEMS.filter((i) => guardados.has(i.id));
     else if (vista === 'vistos') xs = ITEMS.filter((i) => vistos[i.id]);
+    else if (vista === 'notas') xs = ITEMS.filter((i) => notas[i.id]?.texto).sort((a, b) => notas[b.id].fecha - notas[a.id].fecha);
     if (estado.nuevos) xs = xs.filter(esNuevo);
     busqueda = null;
     if (estado.q.trim()) {
@@ -1629,6 +1774,24 @@
     return CONTEXTO_TITULO.test(resto);
   }
 
+  // Traducción automática (inglés → español) de los resultados en vivo; si falla, quedan en inglés.
+  async function traducirEnVivo(xs) {
+    const textos = xs.flatMap((i) => [i.titulo, i.resumen || '']);
+    if (!textos.length) return;
+    try {
+      const cuerpo = new URLSearchParams({ q: textos.map((t) => t.replace(/\s*\n\s*/g, ' ').trim() || '-').join('\n') });
+      const r = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=es&dt=t', { method: 'POST', body: cuerpo, signal: AbortSignal.timeout(10000) });
+      const lineas = (await r.json())[0].map((x) => x[0] || '').join('').split('\n').map((x) => x.trim());
+      if (lineas.length !== textos.length) return;
+      xs.forEach((i, k) => {
+        const [tit, res] = [lineas[2 * k], lineas[2 * k + 1]];
+        if (!tit) return;
+        Object.assign(i, { tituloOriginal: i.titulo, titulo: tit, traducido: true, resumen: i.resumen ? res : i.resumen });
+        i._tit = norm(`${i.titulo} · ${i.tituloOriginal}`);
+      });
+    } catch { /* sin traducción: se muestran en inglés */ }
+  }
+
   let afuera = null; // { clave, pagina, agotadas, cargando, vacias, inicio, items }
   const claveAfuera = () => `${estado.q}|${estado.idioma}|${estado.plat}|${estado.tipo}`;
   const plataformasAfuera = () => PLATAFORMAS_AFUERA.filter((f) => (estado.plat === 'todas' || estado.plat === f.plataforma)
@@ -1683,6 +1846,8 @@
       return l.videos.map((v) => prepararAfuera(v, fuentes[k].plataforma)).filter((i) => sirveAfuera(i, b));
     });
     const puntos = new Map(grupos.flat().map((i) => [i, puntuar(i, b)?.puntos ?? i._rec * 0.12]));
+    await traducirEnVivo(grupos.flat().filter((i) => i.idioma === 'en'));
+    if (afuera !== a || claveAfuera() !== clave) return;
     const mejor = (g) => g.sort((x, y) => puntos.get(y) - puntos.get(x));
     const nuevos = porTurnos(grupos.map((g) => porTurnos(agruparPor(g, (i) => i.fuenteId).map(mejor), (i) => puntos.get(i))), (i) => puntos.get(i))
       .filter((i, k, xs) => xs.findIndex((x) => x.id === i.id) === k);
@@ -1770,7 +1935,7 @@
     el.herramientas.hidden = el.resultado.hidden = el.grilla.hidden = el.barraHashtags.hidden = el.barraPlat.hidden = !conGrilla;
 
     if (!conGrilla) {
-      const pintores = { explorar: pintarExplorar, listas: pintarListas, lista: pintarDetalleLista, ver: () => pintarReproductor(false) };
+      const pintores = { explorar: pintarExplorar, listas: pintarListas, lista: pintarDetalleLista, ver: () => pintarReproductor(false), charla: pintarCharla, constancia: pintarConstancia };
       pintores[estado.vista]();
       ubicarFlotante();
       const titulos = { explorar: 'Explorar', listas: 'Listas', lista: obtenerLista(estado.id)?.nombre };
@@ -1922,6 +2087,7 @@
       <div class="menu">
         ${reproducible(i) && !esArchivoLocal ? `<a class="menu-op" href="#/v/${id}">${svg('play', 'relleno')}<span>Ver aquí</span></a>` : ''}
         <a class="menu-op" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer" data-salida="${id}">${svg('externo')}<span>Abrir en ${esc(destinoDe(i))}</span></a>
+        <a class="menu-op" href="#/charla/${id}">${svg('megafono')}<span>Preparar charla de 5 minutos</span></a>
         ${op('agregar-lista', 'lista', 'Agregar a una lista')}
         ${op('guardar', 'corazon', guardado ? 'Quitar de guardados' : 'Guardar')}
         ${op('compartir', 'compartir', 'Compartir')}
@@ -2110,6 +2276,13 @@
   }
 
   const ACCIONES = {
+    imprimir() { window.print(); },
+    'copiar-charla'() {
+      const k = contenidoCharla();
+      const texto = [`*Charla de 5 minutos: ${k.titulo}*`, '', `*Objetivo:* ${k.objetivo}`, '', '*Material:*',
+        ...k.items.map((i) => `▶ ${i.titulo}\n${i.url}`), '', '*Para conversar:*', ...k.preguntas.map((p, n) => `${n + 1}. ${p}`), '', 'Preparado con SST Hub'].join('\n');
+      navigator.clipboard?.writeText(texto).then(() => aviso('Copiado: pégalo en WhatsApp o en un correo.'), () => aviso('No se pudo copiar.'));
+    },
     limpiar() {
       el.q.value = '';
       actualizarFiltros({ ...FILTROS_BASE, orden: estado.orden });
@@ -2262,6 +2435,51 @@
       avanceAutomatico = t.checked;
       almacen.guardar('autoavance', avanceAutomatico);
     }
+  });
+
+  let relojNota;
+  document.addEventListener('input', (e) => {
+    const t = e.target;
+    if (t.matches('[data-charla]')) {
+      datosCharla = { ...datosCharla, [t.dataset.charla]: t.value };
+      almacen.guardar('charla', datosCharla);
+      $$(`[data-charla="${t.dataset.charla}"]`).forEach((x) => { if (x !== t && x.tagName === 'INPUT') x.value = t.value; });
+    } else if (t.matches('[data-charla-titulo]')) {
+      datosCharla = { ...datosCharla, titulo: { ...(datosCharla.titulo || {}), [estado.id]: t.textContent.trim() } };
+      almacen.guardar('charla', datosCharla);
+      const tema = $('[data-charla-tema]');
+      if (tema) tema.value = t.textContent.trim();
+    } else if (t.matches('[data-nota]')) {
+      clearTimeout(relojNota);
+      relojNota = setTimeout(() => {
+        const texto = t.value.trim();
+        if (texto) notas[t.dataset.nota] = { texto, fecha: ahora() };
+        else delete notas[t.dataset.nota];
+        almacen.guardar('notas', notas);
+        actualizarContadores();
+        const est = $('#notaEstado');
+        if (est) est.textContent = texto ? 'Guardado' : '';
+      }, 400);
+    }
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target.matches('select[data-charla]')) {
+      datosCharla = { ...datosCharla, [e.target.dataset.charla]: e.target.value };
+      almacen.guardar('charla', datosCharla);
+      pintarCharla();
+    }
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-nota-minuto]')) return;
+    const caja = $('#notaTexto');
+    const seg = Math.floor(reproductor?.player?.getCurrentTime?.() || 0);
+    if (!caja) return;
+    const marca = `[${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, '0')}] `;
+    const pos = caja.selectionStart ?? caja.value.length;
+    const antes = caja.value.slice(0, pos);
+    caja.value = `${antes}${antes && !antes.endsWith('\n') ? '\n' : ''}${marca}${caja.value.slice(pos)}`;
+    caja.focus();
+    caja.dispatchEvent(new Event('input', { bubbles: true }));
   });
 
   document.addEventListener('submit', (e) => {

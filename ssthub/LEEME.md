@@ -26,7 +26,6 @@ Galería de miniaturas que reúne **8000 videos, artículos y guías** de seguri
 - **Al bajar, sigue buscando**: cuando se acaban los resultados de una búsqueda, el portal busca en vivo en los **blogs de SST** (los ~50 que usan WordPress, con todo lo que publicaron, no solo lo último), en **Dailymotion** y en **Internet Archive**, y los muestra debajo de “Más resultados en…”. Solo entra lo que habla de seguridad laboral: en los videos, el título debe tener lo buscado y otra palabra de seguridad o de formación (“uso de”, “tipos”, “curso”, “NFPA”…); se descartan noticieros, películas, deportes y música.
 - **Filtros que no te dejan en blanco**: cada opción muestra cuántos resultados da con el resto de los filtros (“YouTube 247 · Webs y blogs 46 · Vimeo 2”) y las que dejarían la página vacía aparecen desactivadas. Los filtros activos se ven como etiquetas con ✕ para quitarlos de un toque. Si igual no hay resultados, la página dice qué filtro estorba: “Quitar «Internet Archive» → 486 resultados”.
 - **Pestañas “Ver en”**: Todas · YouTube · Webs y blogs · Vimeo · Dailymotion · Internet Archive, con su cantidad, sobre los resultados.
-- **Afinar por tema** en cada búsqueda: los temas donde más aparece lo buscado, con su cantidad (“Prevención de incendios 149 · Charlas 68…”), para buscar solo dentro de uno.
 - **Búsquedas frecuentes y recientes**: al tocar el buscador vacío aparecen lo más buscado en SST (IPERC, trabajo en altura, LOTO, ICAM…) y tus últimas búsquedas.
 - Filtros por tipo (video, artículo, PDF), sector, idioma, **plataforma** (YouTube, Vimeo, Dailymotion, Internet Archive, webs y blogs), fuente y orden (recomendados, recientes, **más vistos**…), en **cuadrícula o lista**.
 - **Vista previa animada** al pasar el mouse sobre un video, como en los sitios de videos.
@@ -44,6 +43,12 @@ Galería de miniaturas que reúne **8000 videos, artículos y guías** de seguri
 **Buscador afinado**: puntúa por relevancia (título > hashtags > descripción; la frase exacta suma), entiende sinónimos y siglas de SST en español e inglés (LOTO = bloqueo y etiquetado, extintor = fire extinguisher, RCP = CPR…), corrige errores de tipeo (“estintor” → “extintor”), resalta las palabras encontradas y, si ninguna coincide del todo, avisa y muestra lo más cercano.
 
 **Solo seguridad laboral**: todas las fuentes pasan por el mismo filtro (la palabra de seguridad debe estar en el título o la lista de reproducción, o dos veces en la descripción, sin contar el texto que el canal repite en todos sus videos) y se excluyen temas ajenos (música, videojuegos, recetas, fútbol…).
+
+**Lo que YouTube no te da** (también resumido en el inicio)
+- **Kit de charla de 5 minutos** (`#/charla/<video o lista>`): desde cualquier video («Preparar charla»), el menú ⋮ o una lista. Arma la guía del capacitador (objetivo, puntos que no pueden faltar, material con código QR, preguntas para conversar, compromisos) y el **registro de asistencia** con el formato referencial de la RM 050-2013-TR (datos del empleador, inducción / capacitación / entrenamiento / simulacro, tema, horas, capacitador y tabla de participantes). El título se puede editar; los datos de la empresa se recuerdan. Se imprime o guarda en PDF (A4) y se puede copiar para WhatsApp.
+- **Traducción automática**: lo que está en inglés se muestra en español con la etiqueta «Traducido» (el original aparece al pasar el mouse y en la página del video). Las traducciones se guardan en `data/traducciones.json`.
+- **Mis notas**: en cada video hay una caja de notas (con «Marcar minuto actual» en YouTube). Todo lo anotado aparece en «Mis notas».
+- **Progreso y constancia**: cada lista muestra cuántos recursos viste, y la **constancia de autoaprendizaje** imprimible indica tu nombre, qué viste y cuándo (aclara que no es una certificación oficial).
 
 **Listas (playlists)**
 - **Mis listas**: crea listas (“Charla del lunes”, “Inducción nuevos”) desde el botón ⋮ de cualquier recurso. Reordénalas, renómbralas o bórralas (con “Deshacer”).
