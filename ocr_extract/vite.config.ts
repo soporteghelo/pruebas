@@ -1,35 +1,31 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig, loadEnv, type Plugin} from 'vite';
-import geminiHandler from './api/gemini';
+import {defineConfig} from 'vite';
 
-// En local no hay Vercel: se monta la misma función de /api/gemini como middleware
-// del servidor de desarrollo, para que la app se comporte igual en ambos sitios.
-function apiGeminiLocal(): Plugin {
+export default defineConfig(() => {
   return {
-    name: 'api-gemini-local',
-    configureServer(server) {
-      server.middlewares.use('/api/gemini', (req, res, next) => {
-        geminiHandler(req, res).catch(next);
-      });
-    },
-  };
-}
-
-export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, '.', '');
-  // La clave se pasa al proceso del servidor, nunca al bundle: Vite solo expone al
-  // navegador las variables VITE_*, y GEMINI_API_KEY no lo es.
-  if (env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY) {
-    process.env.GEMINI_API_KEY = env.GEMINI_API_KEY;
-  }
-  return {
-    plugins: [react(), tailwindcss(), apiGeminiLocal()],
+    plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
       },
+    },
+    // El OCR corre en un Web Worker con módulos ES (src/lib/ocr/ocr.worker.ts).
+    worker: {
+      format: 'es' as const,
+    },
+    // onnxruntime-web localiza su binario .wasm por URL; si Vite lo pre-empaqueta en
+    // desarrollo, esa ruta se rompe. Se le pasa la URL explícita desde el worker.
+    // ppu-paddle-ocr se declara aquí porque solo lo importa el worker y Vite no lo ve al
+    // arrancar: lo descubriría en la primera extracción y recargaría la página a mitad.
+    optimizeDeps: {
+      include: ['ppu-paddle-ocr/web'],
+      exclude: ['onnxruntime-web'],
+    },
+    build: {
+      // El runtime de ONNX es grande por naturaleza; el aviso por defecto no aporta.
+      chunkSizeWarningLimit: 2000,
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

@@ -35,7 +35,7 @@ import {
   Maximize2, RotateCcw, MousePointer2, Grab, Menu, PanelLeftClose, PanelLeftOpen, Link2, Layers, FilterX
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { claveConfigurada, processDocuments, releerFilas } from "./lib/gemini";
+import { prepararMotor, processDocuments, releerFilas } from "./lib/ocrLocal";
 import { recortarFilas, type RecorteFila } from "./lib/rowCrop";
 import { copiarTexto } from "./lib/clipboard";
 import { renderPdfToImages } from "./lib/pdf";
@@ -66,14 +66,13 @@ interface BBox {
 }
 
 // Cómo se resolvió el DNI de la fila. La distinción importa de cara a quien revisa:
-// AUTO es aritmética local (matching.ts) y se puede auditar sola; IA implica que hubo
-// una lectura de Gemini de por medio. Antes ambos casos se etiquetaban "IA", lo que
-// atribuía a un modelo coincidencias que en realidad calcula un algoritmo determinista.
+// AUTO es aritmética local (matching.ts) sobre la primera lectura; OCR implica que el
+// renglón se volvió a leer ampliado (relectura) y esa segunda lectura lo resolvió.
 type MatchMethod =
   | "DEFAULT"  // tal como salió de la extracción, sin vincular
   | "MANUAL"   // una persona escribió o confirmó el DNI
-  | "AUTO"     // vinculado por el algoritmo de similitud local, sin IA
-  | "IA";      // releído por el modelo (relectura de renglón)
+  | "AUTO"     // vinculado por el algoritmo de similitud local
+  | "OCR";     // resuelto por la relectura ampliada del renglón
 
 // Estado de extracción de cada documento del lateral. Los proyectos son independientes:
 // cada uno se extrae por su cuenta y conserva su resultado aunque los demás cambien.
@@ -123,7 +122,7 @@ interface MasterRow {
 // agrupan aquí para que la insignia y el botón de "Aceptar altas" no se desincronicen
 // si mañana aparece un tercer método automático.
 const esVinculacionAutomatica = (row: ExtractedRow) =>
-  row.method === "AUTO" || row.method === "IA";
+  row.method === "AUTO" || row.method === "OCR";
 
 // Insignia de método. Estaba duplicada palabra por palabra en la tabla y en las tarjetas
 // móviles, así que un cambio de criterio obligaba a tocar dos sitios y era fácil que uno
@@ -335,17 +334,9 @@ export default function App() {
   const [modelUsed, setModelUsed] = useState<string>("");
   const [relecturaBusy, setRelecturaBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [isApiKeyMissing, setIsApiKeyMissing] = useState<boolean>(false);
-  
-  useEffect(() => {
-    // La clave vive en el servidor: solo se pregunta si está configurada.
-    claveConfigurada().then((ok) => {
-      if (!ok) {
-        setIsApiKeyMissing(true);
-        setErrorMessage("ADVERTENCIA: Falta la variable de entorno GEMINI_API_KEY. Configúrala en Vercel para que la extracción funcione.");
-      }
-    });
-  }, []);
+  // Fase y avance de la lectura local, para el aviso de "Extrayendo". La primera vez
+  // incluye descargar el modelo (~30 MB); sin esto parecería que la app se colgó.
+  const [progresoOcr, setProgresoOcr] = useState<{ fase: string; pct: number } | null>(null);
   
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -592,6 +583,9 @@ export default function App() {
     if (newProcessedFiles.length > 0) {
       setFiles((prev: DocumentFile[]) => [...prev, ...newProcessedFiles]);
       setStatus("idle");
+      // Precarga del motor OCR mientras el usuario revisa lo que subió: al pulsar
+      // Extraer ya está listo. Si falla, la extracción lo reintenta y muestra el error.
+      prepararMotor().catch((err) => console.warn("Precarga del motor OCR fallida:", err));
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -623,7 +617,8 @@ export default function App() {
           data: p.base64, mimeType: p.mimeType, name: `${f.name} (página ${i + 1})`, pagina: i + 1,
         }));
       })();
-      const result = await processDocuments(inputFormats);
+      setProgresoOcr(null);
+      const result = await processDocuments(inputFormats, (fase, pct) => setProgresoOcr({ fase, pct }));
       const rows = result.csv.split('\n').slice(1);
 
       // Paso 1: parseo crudo (guardando la geometría de tabla y total de filas reportados).
@@ -645,7 +640,7 @@ export default function App() {
         };
       }).filter((r: RawRow) => r.nombre || r.dni);
 
-      // Paso 2: consenso de geometría por (archivo + página) para anular el ruido de la IA.
+      // Paso 2: consenso de geometría por (archivo + página) para anular el ruido de la lectura.
       const median = (arr: number[]) => {
         if (arr.length === 0) return NaN;
         const s = [...arr].sort((a, b) => a - b);
@@ -701,7 +696,7 @@ export default function App() {
         const { _tableBox, _totalFilas, ...clean } = r;
         return { ...clean, bbox, rowTotal: c?.total || 0 };
       });
-      // La vinculación local se aplica sola: no tiene coste (es algoritmo, no IA) y
+      // La vinculación local se aplica sola: no tiene coste (es un algoritmo) y
       // dejarla detrás de un botón hacía que el panel se abriera con todo en FUERA
       // aunque los registros fueran perfectamente identificables.
       const { updated } = masterData.length > 0 ? vincularRegistros(parsed) : { updated: parsed };
@@ -723,10 +718,12 @@ export default function App() {
       setEstadoProyectos((prev) => ({ ...prev, [objetivo.id]: "error" }));
       setStatus("error");
       setErrorMessage(err.message || "Error en el procesamiento.");
+    } finally {
+      setProgresoOcr(null);
     }
   };
 
-  // Vinculación local (sin IA) en una sola pasada: por cada registro se puntúan a la vez
+  // Vinculación local en una sola pasada: por cada registro se puntúan a la vez
   // el DNI y el nombre contra toda la maestra y se fusionan ambas señales. Dos indicios
   // medios que apuntan a la misma persona valen más que uno solo, así que casos que antes
   // se quedaban FUERA (DNI con 2 dígitos mal + nombre a medio leer) ahora se resuelven.
@@ -808,12 +805,11 @@ export default function App() {
     }));
   };
 
-  // --- Relectura puntual: el ÚLTIMO recurso, y el único gasto extra de IA -------------
+  // --- Relectura puntual: el ÚLTIMO recurso -----------------------------------------
   //
   // Solo entran aquí las filas que el matching local no logró resolver. La idea es la
   // misma que tiene una persona cuando no distingue un 4 de un 9: acercar la lupa. Se
-  // recorta ese renglón y se manda solo, así recibe para él todo el presupuesto de
-  // tokens que antes se repartía entre las 20 filas de la hoja.
+  // recorta ese renglón a resolución completa y se vuelve a leer solo.
   //
   // Tope duro: si la maestra no cargó, TODAS las filas salen sin coincidencia y sin este
   // límite se dispararía una relectura del documento entero, que es justo lo contrario
@@ -822,11 +818,10 @@ export default function App() {
 
   // (filasSinCoincidencia se declara junto a datosDelProyecto: depende del proyecto activo.)
 
-  // Por debajo de este tamaño se manda la maestra COMPLETA. Prefiltrar tiene un riesgo
-  // que no compensa: si el OCR leyó muy mal, la persona correcta se queda fuera del
-  // conjunto candidato y la relectura ya no puede acertar. Con ~700 personas la lista
-  // entera son unos 10k tokens de entrada en una única llamada, así que no hay motivo
-  // para arriesgarse. El prefiltro queda para maestras grandes, donde sí haría falta.
+  // Por debajo de este tamaño se compara contra la maestra COMPLETA. Prefiltrar tiene un
+  // riesgo que no compensa: si el OCR leyó muy mal, la persona correcta se queda fuera
+  // del conjunto candidato y la relectura ya no puede acertar. El prefiltro queda para
+  // maestras grandes, donde compararlo todo empezaría a notarse en tiempo.
   const MAX_MAESTRA_COMPLETA = 1200;
 
   // Convierte "leer 8 dígitos cualesquiera" en "elegir dentro de una lista conocida",
@@ -903,9 +898,8 @@ export default function App() {
         const nuevoDni = (l.dni || "").replace(/\D/g, "");
         const nombre = l.nombre?.trim() || row.nombre;
         // Si la relectura cae sobre alguien de la maestra, es una resolución limpia.
-        // Único punto del programa donde "IA" es literal: el DNI lo leyó el modelo.
         if (nuevoDni && getMasterInfo(nuevoDni)) {
-          return { ...row, dni: nuevoDni, nombre, method: "IA" as MatchMethod, matchConfidence: l.confianza };
+          return { ...row, dni: nuevoDni, nombre, method: "OCR" as MatchMethod, matchConfidence: l.confianza };
         }
         // Si no, se conserva lo leído para que el matching local lo reintente: un DNI
         // mejor leído puede cruzar el umbral aunque por sí solo no esté en la lista.
@@ -1053,7 +1047,7 @@ export default function App() {
   };
 
   // Abre el documento marcando la fila exacta del registro, con panel de edición.
-  // Primero muestra la marca aproximada (IA) y luego la refina detectando el grid real.
+  // Primero muestra la marca aproximada (anclas de la lectura) y luego la refina detectando el grid real.
   const handleViewRow = async (row: ExtractedRow) => {
     setViewerQuery(row.nombre || row.dni || "");
     const file = documentoDeFila(row);
@@ -1071,7 +1065,7 @@ export default function App() {
     const bands = await detectDataRowBands(pages[pageIdx], xMin, xMax, row.rowTotal);
     if (!bands || !bands.length) return;
 
-    // La marca interpolada a partir de los anclajes de la IA ya da la posición
+    // La marca interpolada a partir de los anclajes de la lectura ya da la posición
     // aproximada de la fila; el grid detectado solo debe afinar sus bordes. Por eso se
     // elige la banda cuyo centro cae más cerca de esa posición, en vez de contar bandas
     // por índice: contar obligaba a acertar cuántas líneas hay antes y después de la
@@ -1092,7 +1086,7 @@ export default function App() {
       // interpolada antes que moverla a un renglón equivocado.
       if (mejorDist > alturaMedia * 1.2) return;
     } else {
-      // Sin anclajes de la IA no hay referencia: se cuenta desde el inicio del grid.
+      // Sin anclajes no hay referencia: se cuenta desde el inicio del grid.
       band = bands[Math.min(Math.max(0, fila - 1), bands.length - 1)];
     }
     if (!band) return;
@@ -1266,8 +1260,8 @@ export default function App() {
     return { total: datosDelProyecto.length, sinMatch, conSugerencia, hayAltaConfianza };
   }, [datosDelProyecto, masterIndex]);
 
-  // Acotada al proyecto activo igual que la tabla: la relectura es la operación que
-  // gasta IA, así que no puede tocar renglones de un documento que no estás mirando.
+  // Acotada al proyecto activo igual que la tabla: la relectura no debe tocar renglones
+  // de un documento que no estás mirando.
   const filasSinCoincidencia = useMemo(
     () => datosDelProyecto.filter((r: ExtractedRow) => !getMasterInfo(r.dni) && !!r.bbox),
     [datosDelProyecto, masterData]
@@ -1545,13 +1539,6 @@ export default function App() {
           </div>
         </div>
         <div className="p-6 border-t border-slate-200 bg-white">
-          {isApiKeyMissing && (
-            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2 text-amber-700">
-              <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
-              <p className="text-[10px] font-medium leading-tight">Configura GEMINI_API_KEY en Vercel</p>
-            </div>
-          )}
-
           {/* Estado de la lista maestra: si no cargó, todo saldría FUERA sin explicación */}
           {masterStatus === "error" ? (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2 text-red-700">
@@ -1581,7 +1568,7 @@ export default function App() {
             const cargando = !!uploadProgress;
             const ocupado = status === "processing" || estadoObjetivo === "procesando";
             const yaExtraido = estadoObjetivo === "listo";
-            const bloqueado = files.length === 0 || !proyectoObjetivo || ocupado || yaExtraido || isApiKeyMissing || cargando;
+            const bloqueado = files.length === 0 || !proyectoObjetivo || ocupado || yaExtraido || cargando;
 
             const etiqueta = cargando ? "Cargando documentos…"
               : ocupado ? "Extrayendo…"
@@ -1603,7 +1590,7 @@ export default function App() {
                   <span className="truncate">{etiqueta}</span>
                 </button>
                 {/* Volver a extraer sigue siendo posible, pero deja de ser el camino por
-                    defecto: hay que pedirlo, porque cuesta una llamada al modelo y
+                    defecto: hay que pedirlo, porque vuelve a leer todo el documento y
                     descarta las correcciones manuales de ese proyecto. */}
                 {yaExtraido && !ocupado && (
                   <button
@@ -1709,7 +1696,7 @@ export default function App() {
             </div>
             {resumenProyecto.total > 0 && (
               <div className="flex flex-wrap items-center gap-2">
-                <button onClick={tryFuzzyMatch} title="Vincula los registros con la lista maestra comparando nombre y DNI (cálculo local, no usa IA)" className="flex items-center gap-2 px-3 py-2 text-[10px] md:text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md active:scale-95 whitespace-nowrap">
+                <button onClick={tryFuzzyMatch} title="Vincula los registros con la lista maestra comparando nombre y DNI (cálculo local)" className="flex items-center gap-2 px-3 py-2 text-[10px] md:text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md active:scale-95 whitespace-nowrap">
                   <Link2 size={14} /> <span className="hidden md:inline">Vincular</span><span className="md:hidden">Vincular</span>
                 </button>
                 {resumenProyecto.hayAltaConfianza && (
@@ -1718,7 +1705,7 @@ export default function App() {
                   </button>
                 )}
                 {/* Último recurso: solo aparece si quedan filas sin resolver, y dice
-                    cuántas va a releer para que el gasto de IA sea siempre explícito. */}
+                    cuántas va a releer. */}
                 {filasSinCoincidencia.length > 0 && (
                   <button
                     onClick={handleRelectura}
@@ -1831,7 +1818,7 @@ export default function App() {
                   </p>
                   <button
                     onClick={() => executeExtraction(proyectoActivo)}
-                    disabled={isApiKeyMissing || !!uploadProgress}
+                    disabled={!!uploadProgress}
                     className="mt-1 flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 rounded-full transition-colors"
                   >
                     <Play size={12} fill="currentColor" /> Extraer {nombreProyecto(proyectoActivo)}
@@ -2054,16 +2041,25 @@ export default function App() {
                   <p className="text-sm text-slate-500 leading-relaxed">
                     {/* Se nombra el documento: ahora se procesa de uno en uno y conviene
                         que se vea cuál, sobre todo si hay varios en la lista. */}
-                    Analizando <strong className="text-slate-700">{proyectoObjetivo ? nombreProyecto(proyectoObjetivo) : "el documento"}</strong>. Esto puede tomar unos segundos dependiendo de la complejidad…
+                    Analizando <strong className="text-slate-700">{proyectoObjetivo ? nombreProyecto(proyectoObjetivo) : "el documento"}</strong> en este equipo, sin enviarlo a ningún servidor.
                   </p>
+                  {progresoOcr && (
+                    <p className="mt-2 text-xs font-semibold text-blue-700">
+                      {progresoOcr.fase}{progresoOcr.pct > 0 && progresoOcr.pct < 100 ? ` · ${progresoOcr.pct}%` : "…"}
+                    </p>
+                  )}
                 </div>
                 <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ x: "-100%" }}
-                    animate={{ x: "100%" }}
-                    transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
-                    className="w-1/2 h-full bg-blue-600 rounded-full"
-                  />
+                  {progresoOcr && progresoOcr.pct > 0 && progresoOcr.pct < 100 ? (
+                    <div className="h-full bg-blue-600 rounded-full transition-all" style={{ width: `${progresoOcr.pct}%` }} />
+                  ) : (
+                    <motion.div 
+                      initial={{ x: "-100%" }}
+                      animate={{ x: "100%" }}
+                      transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                      className="w-1/2 h-full bg-blue-600 rounded-full"
+                    />
+                  )}
                 </div>
               </div>
             </div>

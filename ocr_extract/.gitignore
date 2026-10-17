@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Modelos del OCR local: se descargan al compilar (scripts/descargar-modelos.mjs)
+public/models/

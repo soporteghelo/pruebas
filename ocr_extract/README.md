@@ -1,61 +1,48 @@
-# IntelliExtract - Asistencia OCR
+# IntelliExtract - Asistencia OCR (versión OCR local)
 
-Aplicación de Visión Computacional y OCR especializada en la extracción de datos de documentos corporativos y registros de asistencia mediante modelos avanzados de Google Gemini.
+Extrae la tabla de participantes de registros de asistencia manuscritos (fotos o PDF) y la cruza con la lista maestra de personal.
 
-🌐 **Despliegue en Producción:** [https://extractor-list.vercel.app/](https://extractor-list.vercel.app/)
+Esta versión lee las fichas **en el propio navegador**, con [PP-OCRv6](https://github.com/PaddlePaddle/PaddleOCR) a través de [`ppu-paddle-ocr`](https://github.com/PT-Perkasa-Pilar-Utama/ppu-paddle-ocr). No usa Gemini ni ninguna otra API: no hay claves que configurar, no hay cuotas ni pagos, y las imágenes no salen del equipo.
 
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+## Cómo funciona
 
-## ⚙️ Configuración de Variables de Entorno (Obligatorio)
+Por cada página:
 
-Esta aplicación requiere una API Key de Google Gemini para funcionar (tanto en local como en Vercel).
+1. **Mide la tabla** (`src/lib/ocr/rejilla.ts`): detecta las líneas horizontales y verticales, el giro de la foto y los renglones tachados con una raya.
+2. **Lee el texto** (`src/lib/ocr/motor.ts` + `ocr.worker.ts`): borra las líneas de la tabla en una copia de la imagen y la lee con PP-OCRv6 *small* (~7,7 M de parámetros) en un Web Worker, para no congelar la interfaz.
+3. **Reconstruye la tabla** (`src/lib/ocr/tabla.ts`): reparte cada palabra en su renglón y su columna (Nro, Apellidos y Nombres, DNI, Ocupación, Área) usando las líneas y los títulos impresos de la cabecera.
 
-La clave se usa **solo en el servidor**: el navegador llama a la función `/api/gemini` ([api/gemini.ts](./api/gemini.ts)) y es esa función la que habla con Gemini. Por eso la variable se llama `GEMINI_API_KEY`, **sin** el prefijo `VITE_`.
+La salida es el mismo CSV que antes generaba Gemini, así que la vinculación con la lista maestra, el visor y las exportaciones funcionan igual. La relectura de renglones sin coincidencia también es local: recorta el renglón a resolución completa y lo vuelve a leer.
 
-> ⚠️ No uses `VITE_GEMINI_API_KEY`. Vite mete toda variable `VITE_*` dentro del JavaScript público, así que cualquiera podía copiar la clave desde la web desplegada. Así se filtró, y Google suspendió la clave anterior.
+## Modelos
 
-### En Desarrollo Local
-1. Crea un archivo `.env` en la raíz del proyecto (puedes copiar el contenido de `.env.example`).
-2. Añade tu API Key:
-   ```env
-   GEMINI_API_KEY="tu_api_key_de_gemini_aqui"
-   ```
+Los archivos del modelo (~30 MB) **no se guardan en git**. El script `scripts/descargar-modelos.mjs` los descarga a `public/models/` antes de `npm run dev` y de `npm run build` (también en Vercel), y la app los sirve ella misma. El navegador los guarda en caché, así que solo se descargan la primera vez en cada equipo.
 
-### En Producción (Vercel)
-Para que el despliegue funcione correctamente, debes configurar la variable en el panel de Vercel:
-1. Ve a tu proyecto en Vercel > **Settings** > **Environment Variables**.
-2. Agrega una nueva variable:
-   - **Key:** `GEMINI_API_KEY`
-   - **Value:** `tu_api_key_de_gemini_aqui`
-3. Guarda la configuración.
-4. Si existe una variable antigua `VITE_GEMINI_API_KEY`, **bórrala**.
-5. **Importante:** Ve a la pestaña **Deployments** y realiza un **Redeploy** para que la función tome la variable nueva.
+Si al compilar no se pudieran descargar, la app los pide a su origen público (Hugging Face) la primera vez que se usa.
 
-> Cada envío a `/api/gemini` puede pesar como máximo 4.5 MB (límite de Vercel). Las imágenes se envían reducidas a 2200 px para que quepan varias páginas; si un PDF muy largo no cabe, la app pide dividirlo.
+Qué modelo se usa y de dónde se descarga está en `src/lib/ocr/modelos.json`. Para un equipo muy lento se puede cambiar a la variante *tiny* (~6 MB), que es más rápida pero lee bastante peor la letra a mano.
 
-> ⚠️ Si no configuras esta variable en Vercel, el botón de extracción se deshabilitará por seguridad y mostrará una alerta naranja en la interfaz.
+## Instalación y ejecución local
 
-## 🚀 Instalación y Ejecución Local
+**Requisitos:** Node.js 18 o superior.
 
-**Requisitos:** Node.js
+```bash
+npm install
+npm run dev      # descarga los modelos la primera vez y arranca en http://localhost:3000
+```
 
-1. Instala las dependencias:
-   ```bash
-   npm install
-   ```
-2. Asegúrate de tener configurado tu archivo `.env` con la variable `GEMINI_API_KEY`.
-3. Inicia el servidor de desarrollo:
-   ```bash
-   npm run dev
-   ```
+Para producción:
 
-## 📊 Configuración del Backend y Google Sheets
+```bash
+npm run build    # deja la app en dist/, modelos incluidos
+```
 
-La aplicación incluye la funcionalidad de enviar los datos extraídos directamente hacia una base de datos en Google Sheets a través de Apps Script.
+## Límites del OCR local
 
-Para aprender cómo configurar tu propio Google Apps Script, cómo desplegarlo como Web App y dónde actualizar el enlace de conexión en este proyecto, por favor revisa el documento de configuración dedicado:
+- Lee bien la letra de imprenta y la cursiva clara. Con letra muy desordenada fallará más que un modelo grande en la nube; la vinculación con la maestra compensa buena parte de esos errores (tolera DNIs con dígitos mal leídos y nombres a medio leer).
+- Funciona mejor con fotos derechas, enfocadas y con la tabla completa. Tolera giros de hasta unos 4°, pero no fotos muy en perspectiva ni hojas dobladas.
+- La primera extracción en cada equipo descarga ~60 MB (modelo + motor de ONNX). Las siguientes no descargan nada.
 
-👉 [**Manual de Configuración del Backend (Apps Script)**](./BACKEND_README.md)
+## Configuración del Backend y Google Sheets
 
+El envío de los datos a Google Sheets a través de Apps Script no cambia. Revisa el [Manual de Configuración del Backend (Apps Script)](./BACKEND_README.md).

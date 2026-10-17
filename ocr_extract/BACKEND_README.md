@@ -1,6 +1,6 @@
 # ⚙️ Configuración del Backend (Google Apps Script)
 
-El proyecto utiliza **Google Apps Script** como un backend ligero (Web App) para recibir los datos extraídos por la inteligencia artificial (Gemini) y guardarlos directamente en una hoja de cálculo de Google Sheets.
+El proyecto utiliza **Google Apps Script** como un backend ligero (Web App) para recibir los datos extraídos por el OCR local de la app y guardarlos directamente en una hoja de cálculo de Google Sheets.
 
 ## 🔗 Despliegue Actual (Web App URL)
 El enlace web actual desplegado para recibir las peticiones es:

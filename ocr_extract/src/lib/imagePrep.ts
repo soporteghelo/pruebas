@@ -1,11 +1,11 @@
 // Preprocesado de imagen para OCR (visión clásica, sin IA).
 //
-// Objetivo: entregarle a Gemini una imagen limpia — sin sombras, con el texto bien
+// Objetivo: entregarle al OCR una imagen limpia — sin sombras, con el texto bien
 // separado del papel — para que acierte más en la primera pasada.
 //
 // REGLA QUE NO SE PUEDE ROMPER: todas las operaciones son FOTOMÉTRICAS (cambian el
 // color de cada píxel, nunca su posición). Nada de enderezar, rotar ni recortar.
-// El modelo devuelve las coordenadas de cada fila en la imagen que se le manda; si
+// La lectura devuelve las coordenadas de cada fila en la imagen que se le pasa; si
 // aquí se moviera un solo píxel, esas marcas dejarían de cuadrar con el documento
 // original que ve el usuario en el visor.
 
@@ -42,19 +42,17 @@ function partirDataUrl(dataUrl: string): ImagenPreparada {
  *     y el papel blanco, sin recortar los extremos por culpa de cuatro píxeles sueltos.
  *
  * No binariza a blanco y negro puro a propósito: en lápiz flojo o bolígrafo claro,
- * el umbral duro se come trazos enteros y el modelo multimodal trabaja peor con
+ * el umbral duro se come trazos enteros y el reconocedor trabaja peor con
  * imágenes de dos tonos que con un gris bien contrastado.
  *
  * Si algo falla, devuelve la imagen original: preprocesar nunca debe impedir extraer.
  */
-// `maxSide` = 2200: algo por debajo de los 2600 px a los que se rasterizan los PDF. Desde
-// que la extracción pasa por /api/gemini, cada envío tiene un techo de 4.5 MB (Vercel), y
-// a 2600 px un PDF de 3 hojas ya no cabía. 2200 px recorta ~30% del área y sigue dejando a
-// un A4 vertical con 20 filas unos 70 px por renglón, de sobra para dígitos manuscritos.
-// No bajar mucho más: quedarse corto de píxeles vuelve ilegibles los dígitos en casillas.
-// Solo afecta a lo que se ENVÍA: el visor y los recortes de relectura usan la página a
-// resolución completa, y las coordenadas del modelo son relativas (0-1000), así que la
-// marca sigue cayendo en su fila aunque la imagen enviada sea más pequeña.
+// `maxSide` = 2200: deja a un A4 vertical con 20 filas unos 70 px por renglón, de sobra
+// para dígitos manuscritos, sin que leer la página tarde de más (el detector trabaja a
+// 1920 px como mucho). No bajar mucho más: quedarse corto de píxeles vuelve ilegibles los
+// dígitos en casillas. Solo afecta a lo que se LEE: el visor y los recortes de relectura
+// usan la página a resolución completa, y las coordenadas de la lectura son relativas
+// (0-1000), así que la marca sigue cayendo en su fila.
 export async function enhanceForOcr(dataUrl: string, maxSide = 2200): Promise<ImagenPreparada> {
   try {
     const img = await cargarImagen(dataUrl);

@@ -1,10 +1,9 @@
 // Recorte de renglones para la relectura puntual (Fase 4).
 //
-// Por qué existe: Gemini reparte un presupuesto fijo de tokens por imagen. Una A4 con
-// 20 filas a ULTRA_HIGH son 2240 tokens para toda la hoja, así que a cada DNI escrito a
-// mano le tocan ~100. Ese mismo renglón recortado y enviado solo recibe los 2240 enteros.
-// Es literalmente acercar la lupa, que es lo que hace una persona cuando no distingue
-// un 4 de un 9.
+// Por qué existe: la página completa se lee reducida (2200 px de lado largo) y el
+// detector de texto la vuelve a reducir. Ese mismo renglón recortado a resolución
+// completa se lee con todo su detalle. Es literalmente acercar la lupa, que es lo que
+// hace una persona cuando no distingue un 4 de un 9.
 //
 // Solo se usa sobre las filas que quedaron sin coincidencia en la maestra, así que en un
 // documento típico son 1-3 recortes diminutos, no una relectura del documento.
@@ -24,7 +23,7 @@ export interface RecorteFila {
   mimeType: string;
 }
 
-// La bbox de cada fila es interpolada entre dos anclas que da el modelo, así que arrastra
+// La bbox de cada fila es interpolada entre dos anclas de la lectura, así que puede arrastrar
 // error. Un margen generoso arriba y abajo garantiza que el renglón entre entero en el
 // recorte aunque la interpolación se haya desviado media línea.
 const MARGEN_VERTICAL = 0.5;
@@ -35,7 +34,7 @@ const MARGEN_HORIZONTAL = 0.02;
  * misma limpieza fotométrica que al resto del pipeline.
  *
  * `bbox` viene normalizada 0-1000 sobre la página completa (el sistema de coordenadas
- * que devuelve el modelo). Si un recorte falla, se omite esa fila en lugar de tumbar
+ * que devuelve la lectura). Si un recorte falla, se omite esa fila en lugar de tumbar
  * toda la operación: releer 2 de 3 filas es mejor que no releer ninguna.
  */
 export async function recortarFilas(
