@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Llenador de Formulario</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f4f6f9;--card:#fff;--text:#1d2433;--muted:#667085;--line:#e3e7ee;
+  --accent:#1f4e78;--accent-2:#2f6fa8;--ok:#13795b;--ok-bg:#e6f4ef;--err:#b42318;--err-bg:#fdecea;
+  --warn:#9a6700;--warn-bg:#fff6dd;--chip:#eef2f7;--info-bg:#eaf2fb;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12151b;--card:#1b2029;--text:#e6e9ef;--muted:#98a2b3;--line:#2c3340;
+  --accent:#5b9bd5;--accent-2:#7fb3e3;--ok:#4cc38a;--ok-bg:#15302a;--err:#f97066;--err-bg:#3a1d1b;
+  --warn:#f5c451;--warn-bg:#3a3018;--chip:#252b36;--info-bg:#18273a;}}
+:root[data-theme="dark"]{
+  --bg:#12151b;--card:#1b2029;--text:#e6e9ef;--muted:#98a2b3;--line:#2c3340;
+  --accent:#5b9bd5;--accent-2:#7fb3e3;--ok:#4cc38a;--ok-bg:#15302a;--err:#f97066;--err-bg:#3a1d1b;
+  --warn:#f5c451;--warn-bg:#3a3018;--chip:#252b36;--info-bg:#18273a;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1150px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+.card h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+h3{font-size:14px;margin:18px 0 8px;display:flex;align-items:center;gap:8px}
+.n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;flex:none}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+input[type=text],input[type=number],input[type=date],input[type=time],input[type=datetime-local],select{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:7px 9px;font:inherit;min-width:0;max-width:100%}
+input[type=text].grow{flex:1 1 280px}
+button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+button.sec{background:var(--chip);color:var(--text)}
+button:disabled{opacity:.5;cursor:not-allowed}
+a{color:var(--accent-2)}
+.drop{display:block;border:2px dashed var(--line);border-radius:10px;padding:18px;text-align:center;color:var(--muted);cursor:pointer}
+.drop.over{border-color:var(--accent);color:var(--accent)}
+.or{color:var(--muted);text-align:center;margin:10px 0}
+table{width:100%;border-collapse:collapse}
+th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap}
+.scroll{overflow:auto;max-height:460px;border:1px solid var(--line);border-radius:8px}
+.scroll th{position:sticky;top:0;background:var(--card);z-index:1}
+.box{border:1px solid var(--line);border-radius:8px;overflow-x:auto}
+.req{color:var(--err);font-weight:700}
+.chip{display:inline-block;background:var(--chip);border-radius:6px;padding:1px 7px;font-size:12px;color:var(--muted);margin:1px 2px 1px 0;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+.tipo{font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+.st{font-size:12px;font-weight:600;border-radius:6px;padding:2px 7px;white-space:nowrap}
+.st.ok{color:var(--ok);background:var(--ok-bg)}.st.err{color:var(--err);background:var(--err-bg)}
+.st.warn{color:var(--warn);background:var(--warn-bg)}.st.off{color:var(--muted);background:var(--chip)}
+.note{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:8px 10px;font-size:13px;margin-top:10px}
+.info{background:var(--info-bg);border-radius:8px;padding:10px 12px;font-size:13px}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.bar{height:8px;background:var(--chip);border-radius:6px;overflow:hidden;flex:1 1 200px}
+.bar>div{height:100%;width:0;background:var(--ok);transition:width .2s}
+#log{font:12px/1.5 ui-monospace,Consolas,monospace;max-height:220px;overflow:auto;background:var(--bg);border-radius:8px;padding:8px;margin-top:10px;white-space:pre-wrap}
+td.err{color:var(--err);font-size:12px}
+.hidden{display:none!important}
+.excl{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px;display:grid;gap:8px}
+textarea{width:100%;background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px;font:13px/1.4 ui-monospace,Consolas,monospace;resize:vertical}
+tr.off td{opacity:.5;text-decoration:line-through}
+tr.off td:first-child,tr.off td:nth-child(3){text-decoration:none}
+.stats{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.stat{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:13px}
+.stat b{font-size:16px;margin-right:4px}
+.qlabel{font-weight:600}
+.qdesc{color:var(--muted);font-size:12px;margin-top:2px}
+.fixed-ed{display:flex;flex-direction:column;gap:6px;min-width:260px}
+.fixed-ed select{width:100%}
+.checks{display:flex;flex-direction:column;gap:3px;font-size:13px}
+.checks label{display:flex;gap:6px;align-items:flex-start}
+.orig{width:100%;min-width:190px}
+td.c-orig{width:230px}
+.grp-a{border-left:3px solid var(--accent)}
+.grp-b{border-left:3px solid var(--ok)}
+.empty{color:var(--muted);padding:12px;font-size:13px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 0.8s linear infinite;vertical-align:middle}
+@keyframes sp{to{transform:rotate(360deg)}}
+.fbox{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px;display:grid;gap:10px}
+.flt{position:relative}
+.fbtn{padding:6px 10px;font-size:13px;font-weight:500}
+.fbtn.on{background:var(--accent);color:#fff;font-weight:600}
+.pop{position:absolute;top:calc(100% + 4px);left:0;z-index:20;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;width:280px;box-shadow:0 8px 24px rgba(0,0,0,.18);display:grid;gap:8px}
+.pop input[type=text]{width:100%}
+.pop .list{max-height:240px;overflow:auto;display:flex;flex-direction:column;gap:2px;font-size:13px}
+.pop .list label{display:flex;gap:6px;align-items:center;padding:2px 4px;border-radius:6px;cursor:pointer}
+.pop .list label:hover{background:var(--chip)}
+.pop .list .cnt{margin-left:auto;color:var(--muted);font-size:11px}
+.pop .acts{display:flex;gap:6px}
+.pop .acts button{padding:4px 10px;font-size:12px}
+@media (max-width:700px){td.c-opc{display:none} td.c-orig{width:auto}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Llenador automático de Google Forms</h1>
+  <p class="sub">Identifica los campos del formulario, carga tu Excel o Google Sheets, define las respuestas comunes y envía.</p>
+
+  <!-- 1. FORMULARIO -->
+  <div class="card">
+    <h2><span class="n">1</span> Formulario</h2>
+    <div class="row">
+      <input type="text" class="grow" id="formUrl" placeholder="Enlace del Google Form (forms.gle/... o docs.google.com/forms/...)">
+      <button id="btnForm">Identificar campos</button>
+    </div>
+    <div id="formInfo" class="muted" style="margin-top:12px">Pega el enlace y pulsa “Identificar campos”.</div>
+  </div>
+
+  <!-- 2. DATOS -->
+  <div class="card hidden" id="cardData">
+    <h2><span class="n">2</span> Cargar Excel o Google Sheets</h2>
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+      Arrastra aquí tu <b>Excel / CSV</b> o haz clic para elegirlo
+    </label>
+    <div class="or">— o —</div>
+    <div class="row">
+      <input type="text" class="grow" id="sheetUrl" placeholder="Enlace de Google Sheets (compartido como 'Cualquiera con el enlace')">
+      <button id="btnSheet">Cargar Sheets</button>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <span id="srcInfo" class="muted">Sin datos cargados.</span>
+      <select id="sheetSel" class="hidden"></select>
+    </div>
+  </div>
+
+  <!-- 3. CAMPOS -->
+  <div class="card hidden" id="cardMap">
+    <h2><span class="n">3</span> Campos del formulario</h2>
+    <div id="mapSummary" class="info"></div>
+
+    <h3><span class="chip" style="background:var(--accent);color:#fff">A</span> Datos que vienen del Excel <span class="muted small" id="cntA"></span></h3>
+    <div class="box grp-a"><table><thead><tr><th>Enviar</th><th>Campo del formulario</th><th>Columna del Excel</th><th class="c-opc">Valores válidos</th></tr></thead><tbody id="bodyA"></tbody></table></div>
+
+    <h3><span class="chip" style="background:var(--ok);color:#fff">B</span> Respuestas iguales para todos <span class="muted small" id="cntB"></span></h3>
+    <div class="box grp-b"><table><thead><tr><th>Enviar</th><th>Campo / pregunta</th><th>Origen</th><th>Respuesta que mandarán todos</th></tr></thead><tbody id="bodyB"></tbody></table></div>
+
+    <div id="unusedCols" class="muted small" style="margin-top:10px"></div>
+    <div id="reqWarn" class="note hidden"></div>
+  </div>
+
+  <!-- 4. FILAS -->
+  <div class="card hidden" id="cardRows">
+    <h2><span class="n">4</span> Elegir filas a enviar</h2>
+    <div class="excl">
+      <label for="exclDni"><b>DNIs que NO deben enviarse</b> <span class="muted">— uno por línea, o separados por coma o espacio</span></label>
+      <textarea id="exclDni" rows="3" placeholder="70000002&#10;70000004"></textarea>
+      <div class="row">
+        <label class="small">Columna con el DNI: <select id="exclCol"></select></label>
+        <span id="exclInfo" class="muted small"></span>
+        <button class="sec" id="exclClear">Limpiar lista</button>
+      </div>
+    </div>
+    <div class="fbox">
+      <div class="row"><b>Filtros por columna</b> <span class="muted small">— solo se enviarán las filas que cumplan todos los filtros</span>
+        <span id="fltInfo" class="small"></span>
+        <button class="sec fbtn" id="fltClear" style="margin-left:auto">Quitar filtros</button></div>
+      <div class="row" id="fltBar"></div>
+    </div>
+    <div class="fbox hidden" id="varBox">
+      <div class="row"><label><input type="checkbox" id="varNom"> <b>Variar formato de nombres</b></label>
+        <span class="muted small">— cada fila manda el nombre con distinto orden (apellidos/nombres primero) y distintas mayúsculas/minúsculas</span>
+        <button class="sec fbtn" id="varMix" style="margin-left:auto">Mezclar de nuevo</button></div>
+      <div class="row muted small" id="varInfo"></div>
+    </div>
+    <div class="row" style="margin-bottom:10px">
+      <button class="sec" id="selAll">Seleccionar todas</button>
+      <button class="sec" id="selNone">Ninguna</button>
+      <button class="sec" id="selValid">Solo válidas</button>
+      <span id="rowCount" class="muted"></span>
+    </div>
+    <div class="scroll"><table><thead id="prevHead"></thead><tbody id="prevBody"></tbody></table></div>
+    <div id="fixedNote" class="muted small" style="margin-top:8px"></div>
+  </div>
+
+  <!-- 5. ENVÍO -->
+  <div class="card hidden" id="cardSend">
+    <h2><span class="n">5</span> Enviar</h2>
+    <div class="row">
+      <label>Pausa entre envíos <input type="number" id="pausa" value="2" min="0.5" step="0.5" style="width:70px"> s</label>
+      <button id="btnSend">Enviar filas seleccionadas</button>
+      <button class="sec hidden" id="btnStop">Detener</button>
+      <div class="bar"><div id="prog"></div></div>
+      <span id="progTxt" class="muted"></span>
+    </div>
+    <div id="log" class="hidden"></div>
+  </div>
+</div>
+
+<script>
+const DEFAULT_URL = "https://forms.gle/xy597RFPPutr5jzq8";
+const TIPO_TXT = {text:"Texto", paragraph:"Párrafo", choice:"Opción única", dropdown:"Desplegable", checkbox:"Casillas (varias)",
+                  scale:"Escala", date:"Fecha", time:"Hora", file:"Archivo"};
+// sinónimos para reconocer columnas del Excel
+const SINONIMOS = [
+  ["DNI","DOCUMENTO","DOC","NRO DOCUMENTO","NUMERO DE DOCUMENTO","CEDULA","CE","N DOCUMENTO"],
+  ["APELLIDOS Y NOMBRES","NOMBRES Y APELLIDOS","NOMBRE COMPLETO","NOMBRES","NOMBRE","TRABAJADOR","COLABORADOR","PARTICIPANTE","APELLIDOS"],
+  ["CORREO ELECTRONICO","CORREO","EMAIL","E MAIL","MAIL"],
+  ["EMPRESA","CONTRATA","RAZON SOCIAL","COMPANIA"],
+  ["AREA","GERENCIA","DEPARTAMENTO"],
+  ["CARGO","PUESTO","OCUPACION"],
+  ["GUARDIA","TURNO","GRUPO"],
+  ["TELEFONO","CELULAR","MOVIL"],
+];
+
+const $ = id => document.getElementById(id);
+const norm = s => String(s ?? "").trim().toUpperCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+const clean = s => norm(s).replace(/[^A-Z0-9]+/g," ").trim();
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+  set(k,v){ try { localStorage.setItem(k,v); } catch {} },
+};
+let FORM = null, wb = null, rows = [], cols = [], mapping = {}, selected = new Set(), built = [], stopFlag = false;
+
+// ===================== 1. Identificar formulario =====================
+$("formUrl").value = store.get("formUrl") || DEFAULT_URL;
+$("btnForm").onclick = identificar;
+$("formUrl").addEventListener("keydown", e => e.key === "Enter" && identificar());
+
+async function identificar(){
+  const url = $("formUrl").value.trim();
+  if (!url) return;
+  $("formInfo").innerHTML = '<span class="spin"></span> Leyendo el formulario…';
+  $("btnForm").disabled = true;
+  try {
+    const res = await fetch("/api/form?url=" + encodeURIComponent(url));
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || "HTTP " + res.status);
+    FORM = j;
+    store.set("formUrl", url);
+    initMapping();
+    renderFormInfo();
+    $("cardData").classList.remove("hidden");
+    $("cardMap").classList.remove("hidden");
+    if (rows.length) autoMap();
+    renderAll();
+  } catch(err){
+    const msg = location.protocol === "file:" ? "Abre la app con iniciar_app.bat (http://localhost:2001) o desde su dirección en Vercel para poder leer formularios."
+      : err instanceof TypeError ? "No se pudo conectar con el servidor de la app. Revisa tu conexión e inténtalo de nuevo." : err.message;
+    $("formInfo").innerHTML = `<span class="st err">Error</span> ${esc(msg)}`;
+  } finally { $("btnForm").disabled = false; }
+}
+
+function renderFormInfo(){
+  const f = FORM.fields;
+  const por = {};
+  f.forEach(x => por[x.type] = (por[x.type]||0) + 1);
+  $("formInfo").innerHTML = `
+    <div class="row" style="justify-content:space-between"><div><b style="font-size:15px;color:var(--text)">${esc(FORM.title)}</b>
+    ${FORM.description ? `<div class="muted small">${esc(FORM.description).slice(0,300)}</div>` : ""}</div>
+    <a href="${esc(FORM.viewUrl)}" target="_blank" rel="noopener">Abrir formulario ↗</a></div>
+    <div class="stats">
+      <div class="stat"><b>${f.length}</b>campos</div>
+      <div class="stat"><b>${f.filter(x=>x.required).length}</b>obligatorios</div>
+      <div class="stat"><b>${FORM.pages}</b>${FORM.pages>1?"secciones":"sección"}</div>
+      ${Object.entries(por).map(([t,n]) => `<div class="stat"><b>${n}</b>${TIPO_TXT[t]||t}</div>`).join("")}
+    </div>
+    ${FORM.warnings.length ? `<div class="note">${FORM.warnings.map(esc).join("<br>")}</div>` : ""}`;
+}
+
+// ===================== 2. Cargar datos =====================
+const drop = $("drop");
+drop.addEventListener("dragover", e => {e.preventDefault(); drop.classList.add("over")});
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", e => {e.preventDefault(); drop.classList.remove("over"); if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0])});
+$("file").addEventListener("change", e => { if (e.target.files[0]) readFile(e.target.files[0]); e.target.value = ""; });
+
+function readFile(f){
+  const r = new FileReader();
+  r.onload = e => loadWorkbook(XLSX.read(e.target.result, {type:"array", cellDates:true}), f.name);
+  r.readAsArrayBuffer(f);
+}
+
+$("btnSheet").onclick = async () => {
+  const url = $("sheetUrl").value.trim();
+  const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (!m) return alert("Enlace de Google Sheets no válido.");
+  const gid = (url.match(/[#&?]gid=(\d+)/) || [])[1];
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv${gid ? "&gid="+gid : ""}`;
+  $("srcInfo").innerHTML = '<span class="spin"></span> Descargando Google Sheets…';
+  try {
+    const res = await fetch(csvUrl);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const txt = await res.text();
+    if (txt.trim().startsWith("<")) throw new Error("la hoja no es pública");
+    loadWorkbook(XLSX.read(txt, {type:"string", cellDates:true}), "Google Sheets");
+  } catch(err){
+    $("srcInfo").textContent = "No se pudo leer la hoja (" + err.message + "). Compártela como 'Cualquiera con el enlace: Lector'.";
+  }
+};
+
+function loadWorkbook(w, name){
+  wb = w;
+  const sel = $("sheetSel");
+  sel.innerHTML = w.SheetNames.map(n => `<option>${esc(n)}</option>`).join("");
+  sel.classList.toggle("hidden", w.SheetNames.length < 2);
+  sel.onchange = () => loadSheet(sel.value, name);
+  loadSheet(w.SheetNames[0], name);
+}
+
+function loadSheet(sheetName, srcName){
+  const data = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header:1, defval:"", raw:true});
+  const hIdx = data.findIndex(r => r.some(c => String(c).trim() !== ""));
+  if (hIdx < 0) return $("srcInfo").textContent = "La hoja está vacía.";
+  cols = data[hIdx].map((c,i) => String(c).trim() || `Columna ${i+1}`);
+  rows = data.slice(hIdx+1).filter(r => r.some(c => String(c).trim() !== ""))
+             .map((r,i) => ({n: hIdx+2+i, cells: cols.map((_,j) => r[j] ?? "")}));
+  $("srcInfo").textContent = `${srcName} · hoja “${sheetName}” · ${rows.length} filas · ${cols.length} columnas`;
+  selected = new Set(rows.map((_,i) => i));
+  filters = {};
+  autoMap();
+  guessExclCol();
+  renderFilterBar();
+  ["cardRows","cardSend"].forEach(id => $(id).classList.remove("hidden"));
+  renderAll();
+}
+
+// ===================== 3. Mapeo =====================
+function fixedKey(){ return "fijos:" + FORM.formKey; }
+function saveFixed(){
+  const o = {};
+  for (const [e,m] of Object.entries(mapping)) o[e] = {fixed:m.fixed, fixedOther:m.fixedOther, send:m.send};
+  store.set(fixedKey(), JSON.stringify(o));
+}
+function initMapping(){
+  let saved = {};
+  try { saved = JSON.parse(store.get(fixedKey()) || "{}"); } catch {}
+  mapping = {};
+  for (const f of FORM.fields){
+    const s = saved[f.entry] || {};
+    let fixed = s.fixed ?? (f.type === "checkbox" ? [] : "");
+    if (f.type === "date" && !fixed) fixed = hoyISO(f.includeTime);
+    mapping[f.entry] = {send: s.send ?? f.type !== "file", src:"fixed", col:-1, fixed, fixedOther: s.fixedOther ?? ""};
+  }
+}
+// los campos de fecha son siempre respuesta fija (igual para todos), nunca columna del Excel
+const siempreFijo = f => f.type === "date";
+function hoyISO(conHora){
+  const d = new Date(), p = n => String(n).padStart(2,"0");
+  const s = `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+  return conHora ? `${s}T${p(d.getHours())}:${p(d.getMinutes())}` : s;
+}
+
+function sinonimosDe(t){ const c = clean(t); return SINONIMOS.find(g => g.includes(c)); }
+// coincidencia por palabras completas ("OCUPACION" no debe coincidir con "OCUPACIONAL")
+const contienePalabras = (txt, sub) => sub.length >= 2 && (" " + txt + " ").includes(" " + sub + " ");
+function puntaje(label, col){
+  const a = clean(label), b = clean(col);
+  if (!a || !b) return 0;
+  if (a === b) return 100;
+  const g = sinonimosDe(b);
+  if (g && g.includes(a)) return 90;
+  // las preguntas largas (examen) solo se relacionan si la columna se llama exactamente igual
+  if (a.split(" ").length > 6) return 0;
+  if (g && g.some(s => contienePalabras(a, s))) return 70;
+  if (contienePalabras(a, b)) return 60;
+  if (contienePalabras(b, a)) return 50;
+  return 0;
+}
+// relaciona cada campo con la columna del Excel que mejor coincide (una columna por campo)
+function autoMap(){
+  if (!FORM) return;
+  const pares = [];
+  FORM.fields.filter(f => !siempreFijo(f)).forEach(f => cols.forEach((c,ci) => { const p = puntaje(f.label, c); if (p) pares.push({e:f.entry, ci, p}); }));
+  pares.sort((x,y) => y.p - x.p);
+  const usadoE = new Set(), usadoC = new Set();
+  for (const f of FORM.fields){ const m = mapping[f.entry]; if (m.src === "col"){ m.src = "fixed"; m.col = -1; } }
+  for (const {e,ci} of pares){
+    if (usadoE.has(e) || usadoC.has(ci)) continue;
+    usadoE.add(e); usadoC.add(ci);
+    Object.assign(mapping[e], {src:"col", col:ci, send:true});
+  }
+}
+
+function renderAll(){ renderMap(); if (rows.length) renderRows(); }
+
+function optChips(f){
+  if (["choice","dropdown","checkbox","scale"].includes(f.type))
+    return f.options.map(o => `<span class="chip" title="${esc(o)}">${esc(o)}</span>`).join("") + (f.other ? '<span class="chip">+ Otro (texto libre)</span>' : "");
+  if (f.type === "date") return `<span class="chip">fecha${f.includeTime?" y hora":""}</span>`;
+  if (f.type === "time") return '<span class="chip">hora</span>';
+  if (f.type === "file") return '<span class="chip">no soportado</span>';
+  return '<span class="chip">texto</span>';
+}
+
+function origSelect(f, m){
+  if (siempreFijo(f)) return '<span class="chip">✎ Fija para todos</span>';
+  const opts = cols.map((c,i) => `<option value="${i}" ${m.src==="col"&&m.col===i?"selected":""}>📄 ${esc(c)}</option>`).join("");
+  return `<select class="orig" data-orig="${esc(f.entry)}">
+    <option value="__fixed" ${m.src==="fixed"?"selected":""}>✎ Respuesta fija para todos</option>
+    ${cols.length ? `<optgroup label="Columnas del Excel">${opts}</optgroup>` : ""}</select>`;
+}
+
+function fixedEditor(f, m){
+  const e = esc(f.entry);
+  switch (f.type){
+    case "choice": case "dropdown": case "scale": {
+      const o = `<option value="">— elegir respuesta —</option>` + f.options.map(op => `<option value="${esc(op)}" ${m.fixed===op?"selected":""}>${esc(op)}</option>`).join("")
+        + (f.other ? `<option value="__other_option__" ${m.fixed==="__other_option__"?"selected":""}>Otro…</option>` : "");
+      return `<div class="fixed-ed"><select data-fixed="${e}">${o}</select>
+        ${m.fixed==="__other_option__" ? `<input type="text" data-other="${e}" value="${esc(m.fixedOther)}" placeholder="Escribe la respuesta “Otro”">` : ""}</div>`;
+    }
+    case "checkbox": {
+      const sel = Array.isArray(m.fixed) ? m.fixed : [];
+      return `<div class="fixed-ed checks">${f.options.map(op => `<label><input type="checkbox" data-multi="${e}" value="${esc(op)}" ${sel.includes(op)?"checked":""}> ${esc(op)}</label>`).join("")}</div>`;
+    }
+    case "date":
+      return `<div class="fixed-ed"><input type="${f.includeTime?"datetime-local":"date"}" data-fixed="${e}" value="${esc(m.fixed)}"></div>`;
+    case "time":
+      return `<div class="fixed-ed"><input type="time" data-fixed="${e}" value="${esc(m.fixed)}"></div>`;
+    case "file":
+      return '<span class="muted small">No se puede llenar automáticamente</span>';
+    default:
+      return `<div class="fixed-ed"><input type="text" data-fixed="${e}" value="${esc(m.fixed)}" placeholder="Texto igual para todos"></div>`;
+  }
+}
+
+function labelCell(f){
+  return `<div class="qlabel">${esc(f.label)} ${f.required?'<span class="req" title="Obligatorio">*</span>':""}</div>
+    <div class="qdesc"><span class="tipo">${TIPO_TXT[f.type]||f.type}</span>${FORM.pages>1?` · sección ${f.page+1}`:""}${f.desc?` · ${esc(f.desc).slice(0,120)}`:""}</div>`;
+}
+
+function renderMap(){
+  if (!FORM) return;
+  const A = FORM.fields.filter(f => mapping[f.entry].src === "col");
+  const B = FORM.fields.filter(f => mapping[f.entry].src === "fixed");
+  const chk = (f,m) => `<input type="checkbox" data-send="${esc(f.entry)}" ${m.send?"checked":""} ${f.type==="file"?"disabled":""}>`;
+
+  $("bodyA").innerHTML = A.length ? A.map(f => { const m = mapping[f.entry];
+    return `<tr><td>${chk(f,m)}</td><td>${labelCell(f)}</td><td class="c-orig">${origSelect(f,m)}</td><td class="c-opc">${optChips(f)}</td></tr>`; }).join("")
+    : `<tr><td colspan="4" class="empty">${rows.length ? "Ninguna columna del Excel coincide con los campos. Elige la columna en el grupo B (Origen)." : "Carga el Excel o Sheets: sus columnas se relacionarán aquí automáticamente."}</td></tr>`;
+
+  $("bodyB").innerHTML = B.length ? B.map(f => { const m = mapping[f.entry];
+    return `<tr><td>${chk(f,m)}</td><td>${labelCell(f)}</td><td class="c-orig">${origSelect(f,m)}</td><td>${fixedEditor(f,m)}</td></tr>`; }).join("")
+    : `<tr><td colspan="4" class="empty">Todos los campos vienen del Excel.</td></tr>`;
+
+  $("cntA").textContent = `(${A.length})`;
+  $("cntB").textContent = `(${B.length})`;
+
+  const pend = B.filter(f => mapping[f.entry].send && f.required && fixedEmpty(f, mapping[f.entry]));
+  $("mapSummary").innerHTML = rows.length
+    ? `Se detectaron <b>${A.length}</b> de ${FORM.fields.length} campos en las columnas del Excel. Los otros <b>${B.length}</b> llevan una respuesta igual para todos`
+      + (pend.length ? ` — <span class="st warn">faltan ${pend.length} obligatoria(s) por responder</span>` : ' — <span class="st ok">completo</span>')
+    : `El formulario tiene <b>${FORM.fields.length}</b> campos. Puedes ir definiendo las respuestas comunes; al cargar el Excel se detectarán las columnas.`;
+
+  const usadas = new Set(A.map(f => mapping[f.entry].col));
+  const libres = cols.filter((_,i) => !usadas.has(i));
+  $("unusedCols").innerHTML = rows.length && libres.length ? `Columnas del Excel que no se envían: ${libres.map(c => `<span class="chip">${esc(c)}</span>`).join("")}` : "";
+
+  const off = FORM.fields.filter(f => f.required && !mapping[f.entry].send).map(f => f.label);
+  $("reqWarn").classList.toggle("hidden", !off.length);
+  $("reqWarn").textContent = off.length ? `Atención: ${off.join(", ")} ${off.length>1?"son obligatorios":"es obligatorio"} en el formulario. Si no los envías, Google rechazará la respuesta.` : "";
+
+  const card = $("cardMap");
+  card.querySelectorAll("[data-send]").forEach(el => el.onchange = () => {mapping[el.dataset.send].send = el.checked; saveFixed(); renderAll();});
+  card.querySelectorAll("[data-orig]").forEach(el => el.onchange = () => {
+    const m = mapping[el.dataset.orig];
+    if (el.value === "__fixed"){ m.src = "fixed"; m.col = -1; } else { m.src = "col"; m.col = +el.value; }
+    renderAll();
+  });
+  card.querySelectorAll("[data-fixed]").forEach(el => {
+    const upd = () => { mapping[el.dataset.fixed].fixed = el.value; saveFixed(); };
+    el.oninput = () => { upd(); if (rows.length) renderRows(); };
+    el.onchange = () => { upd(); renderAll(); };
+  });
+  card.querySelectorAll("[data-other]").forEach(el => el.oninput = () => { mapping[el.dataset.other].fixedOther = el.value; saveFixed(); if (rows.length) renderRows(); });
+  card.querySelectorAll("[data-multi]").forEach(el => el.onchange = () => {
+    const e = el.dataset.multi;
+    mapping[e].fixed = [...card.querySelectorAll(`[data-multi="${CSS.escape(e)}"]:checked`)].map(x => x.value);
+    saveFixed(); renderAll();
+  });
+}
+
+function fixedEmpty(f, m){
+  if (f.type === "checkbox") return !(Array.isArray(m.fixed) && m.fixed.length);
+  if (m.fixed === "__other_option__") return !String(m.fixedOther).trim();
+  return !String(m.fixed ?? "").trim();
+}
+
+// ===================== Conversión de valores =====================
+function parseDate(v){
+  if (v instanceof Date && !isNaN(v)) return v;
+  if (typeof v === "number") return new Date(Math.round((v - 25569) * 864e5) + new Date().getTimezoneOffset()*6e4);
+  const s = String(v).trim();
+  let m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if (m){ let y = +m[3]; if (y < 100) y += 2000; return new Date(y, +m[2]-1, +m[1], +(m[4]||0), +(m[5]||0)); }
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s](\d{1,2}):(\d{2}))?/);
+  if (m) return new Date(+m[1], +m[2]-1, +m[3], +(m[4]||0), +(m[5]||0));
+  return null;
+}
+function parseTime(v){
+  if (v instanceof Date && !isNaN(v)) return [v.getHours(), v.getMinutes()];
+  if (typeof v === "number"){ const t = Math.round((v % 1) * 1440); return [Math.floor(t/60), t%60]; }
+  const m = String(v).trim().match(/^(\d{1,2}):(\d{2})/);
+  return m ? [+m[1], +m[2]] : null;
+}
+// acepta el texto exacto, sin tildes/mayúsculas, o solo la letra ("b" -> "b) ...")
+function matchOption(raw, options){
+  const n = norm(raw);
+  let op = options.find(o => norm(o) === n);
+  if (op) return op;
+  const sinPunt = n.replace(/[).:\s]+$/,"");
+  if (sinPunt.length <= 2) op = options.find(o => new RegExp("^" + sinPunt.replace(/[.*+?^${}()|[\]\\]/g,"\\$&") + "[).:\\s-]").test(norm(o)));
+  return op || options.find(o => clean(o) === clean(raw)) || null;
+}
+function textOf(raw){
+  if (raw instanceof Date) return raw.toLocaleDateString("es-PE");
+  if (typeof raw === "number" && Number.isInteger(raw)) return String(raw);
+  return String(raw ?? "").trim();
+}
+
+// ===================== Variación de nombres =====================
+// campos de nombre completo: se puede variar orden y mayúsculas; los de solo nombre/apellido, solo mayúsculas
+const NOMBRE_COMPLETO = ["APELLIDOS Y NOMBRES","NOMBRES Y APELLIDOS","NOMBRE COMPLETO","TRABAJADOR","COLABORADOR","PARTICIPANTE"];
+const NOMBRE_PARCIAL = ["NOMBRES","NOMBRE","APELLIDOS"];
+const PARTICULAS = new Set(["DE","DEL","LA","LAS","LOS","Y","SAN","SANTA","VAN","VON","DA","DI"]);
+let varSeed = +(store.get("varSeed") || 1);
+function tipoNombre(f, m){
+  if (f.type !== "text" && f.type !== "paragraph") return null;
+  const nombres = [clean(f.label), m.src === "col" && m.col >= 0 ? clean(cols[m.col]) : ""];
+  if (nombres.some(n => NOMBRE_COMPLETO.includes(n))) return "completo";
+  if (nombres.some(n => NOMBRE_PARCIAL.includes(n))) return "parcial";
+  return null;
+}
+function hashFila(n){
+  let h = (Math.imul(n, 0x9E3779B1) ^ Math.imul(varSeed, 0x85EBCA77)) >>> 0;
+  h ^= h >>> 16; h = Math.imul(h, 0x85EBCA6B);
+  h ^= h >>> 13; h = Math.imul(h, 0xC2B2AE35);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+// une partículas con la palabra siguiente: "DE LA CRUZ" cuenta como un solo apellido
+function unidades(palabras){
+  const u = []; let pend = [];
+  for (const p of palabras){
+    pend.push(p);
+    if (!PARTICULAS.has(norm(p))){ u.push(pend.join(" ")); pend = []; }
+  }
+  if (pend.length) u.length ? u[u.length-1] += " " + pend.join(" ") : u.push(pend.join(" "));
+  return u;
+}
+const titulo = s => s.toLowerCase().split(" ").map((w,i) => i && PARTICULAS.has(norm(w)) ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+const CASOS = [
+  s => titulo(s),                                               // Guzman Valverde Ledgar Javier
+  s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(),     // Guzman valverde ledgar javier
+  s => s.toLowerCase(),                                         // guzman valverde ledgar javier
+  s => s.toUpperCase(),                                         // GUZMAN VALVERDE LEDGAR JAVIER
+];
+function variarNombre(txt, tipo, n){
+  const palabras = txt.split(/\s+/).filter(Boolean);
+  if (!palabras.length) return txt;
+  const h = hashFila(n);
+  let partes = [palabras.join(" ")];
+  if (tipo === "completo"){
+    const u = unidades(palabras);
+    // formato del Excel: APELLIDO1 APELLIDO2 NOMBRES (si hay 2 unidades: APELLIDO NOMBRE)
+    const nAp = u.length >= 3 ? 2 : 1;
+    const ap = u.slice(0, nAp).join(" "), no = u.slice(nAp).join(" ");
+    if (no) partes = [[ap + " " + no], [no + " " + ap], [ap + ", " + no]][h % 3];
+  }
+  return CASOS[(h >>> 4) % CASOS.length](partes[0]);
+}
+function camposNombre(){
+  return FORM ? FORM.fields.filter(f => mapping[f.entry].send && mapping[f.entry].src === "col" && tipoNombre(f, mapping[f.entry])) : [];
+}
+function updVarBox(){
+  const cn = camposNombre();
+  $("varBox").classList.toggle("hidden", !cn.length);
+  $("varMix").disabled = !$("varNom").checked;
+  $("varInfo").textContent = cn.length ? `Campo(s): ${cn.map(f => f.label).join(", ")}` + ($("varNom").checked ? " · ejemplo: " + [0,1,2,3,4,5].map(k => variarNombre("GUZMAN VALVERDE LEDGAR JAVIER", "completo", k)).join(" | ") : "") : "";
+}
+$("varNom").checked = store.get("varNom") === "1";
+$("varNom").onchange = () => { store.set("varNom", $("varNom").checked ? "1" : "0"); if (rows.length) renderRows(); };
+$("varMix").onclick = () => { varSeed++; store.set("varSeed", varSeed); if (rows.length) renderRows(); };
+
+function valueFor(f, m, row){
+  if (m.src === "col") return m.col >= 0 ? row.cells[m.col] : "";
+  if (f.type === "checkbox") return Array.isArray(m.fixed) ? m.fixed.join(";") : "";
+  if (m.fixed === "__other_option__") return m.fixedOther;
+  return m.fixed;
+}
+
+function buildPayload(row){
+  const pairs = [], shown = {}, errors = [];
+  for (const f of FORM.fields){
+    const m = mapping[f.entry];
+    if (!m.send || f.type === "file") continue;
+    const raw = valueFor(f, m, row);
+    if (raw === "" || raw == null || (typeof raw === "string" && !raw.trim())){ if (f.required) errors.push(`${f.label}: vacío`); continue; }
+
+    if (f.type === "date"){
+      const d = parseDate(raw);
+      if (!d){ errors.push(`${f.label}: fecha inválida`); continue; }
+      if (f.includeYear !== false) pairs.push([f.entry+"_year", d.getFullYear()]);
+      pairs.push([f.entry+"_month", d.getMonth()+1], [f.entry+"_day", d.getDate()]);
+      if (f.includeTime) pairs.push([f.entry+"_hour", d.getHours()], [f.entry+"_minute", d.getMinutes()]);
+      shown[f.entry] = d.toLocaleDateString("es-PE") + (f.includeTime ? " " + d.toLocaleTimeString("es-PE",{hour:"2-digit",minute:"2-digit"}) : "");
+    } else if (f.type === "time"){
+      const t = parseTime(raw);
+      if (!t){ errors.push(`${f.label}: hora inválida`); continue; }
+      pairs.push([f.entry+"_hour", t[0]], [f.entry+"_minute", t[1]]);
+      shown[f.entry] = `${String(t[0]).padStart(2,"0")}:${String(t[1]).padStart(2,"0")}`;
+    } else if (f.type === "text" || f.type === "paragraph"){
+      shown[f.entry] = textOf(raw);
+      const tn = $("varNom").checked && tipoNombre(f, m);
+      if (tn) shown[f.entry] = variarNombre(shown[f.entry], tn, row.n);
+      pairs.push([f.entry, shown[f.entry]]);
+    } else if (f.type === "checkbox"){
+      const partes = textOf(raw).split(/[;|\n]+/).map(s => s.trim()).filter(Boolean);
+      const vals = []; let otro = null, bad = [];
+      for (const p of partes){ const op = matchOption(p, f.options); if (op) vals.push(op); else if (f.other && !otro) otro = p; else bad.push(p); }
+      if (bad.length){ errors.push(`${f.label}: “${bad.join(", ")}” no es una opción`); continue; }
+      vals.forEach(v => pairs.push([f.entry, v]));
+      if (otro){ pairs.push([f.entry, "__other_option__"], [f.entry+".other_option_response", otro]); }
+      shown[f.entry] = [...vals, ...(otro ? [otro+" (otro)"] : [])].join("; ");
+    } else {
+      const s = textOf(raw), op = matchOption(s, f.options);
+      if (op){ pairs.push([f.entry, op]); shown[f.entry] = op; }
+      else if (f.other){ pairs.push([f.entry, "__other_option__"], [f.entry+".other_option_response", s]); shown[f.entry] = s + " (otro)"; }
+      else errors.push(`${f.label}: “${s}” no es una opción`);
+    }
+  }
+  pairs.push(["fvv","1"], ["pageHistory", Array.from({length:FORM.pages}, (_,i)=>i).join(",")]);
+  if (FORM.fbzx) pairs.push(["fbzx", FORM.fbzx]);
+  return {pairs, shown, errors};
+}
+
+// ===================== 4. DNIs excluidos =====================
+const dniKey = s => String(s ?? "").replace(/\D/g, "").replace(/^0+/, "");
+let excluded = new Set();
+function parseExcluded(){
+  excluded = new Set($("exclDni").value.split(/[\s,;]+/).map(dniKey).filter(Boolean));
+  store.set("dnisExcluidos", $("exclDni").value);
+}
+function guessExclCol(){
+  let ci = cols.findIndex(c => ["DNI","DOCUMENTO","NRO DOCUMENTO","N DOCUMENTO","NUMERO DE DOCUMENTO"].includes(clean(c)));
+  if (ci < 0 && FORM){ const f = FORM.fields.find(x => clean(x.label).includes("DNI") && mapping[x.entry].src === "col"); if (f) ci = mapping[f.entry].col; }
+  $("exclCol").innerHTML = `<option value="-1">— ninguna —</option>` + cols.map((c,i) => `<option value="${i}" ${i===ci?"selected":""}>${esc(c)}</option>`).join("");
+}
+const exclColIdx = () => +$("exclCol").value;
+function rowDni(i){
+  const ci = exclColIdx();
+  if (ci < 0) return "";
+  const v = rows[i].cells[ci];
+  return dniKey(typeof v === "number" ? Math.round(v) : v);
+}
+const isExcluded = i => excluded.size > 0 && excluded.has(rowDni(i));
+$("exclDni").value = store.get("dnisExcluidos") || "";
+parseExcluded();
+$("exclDni").addEventListener("input", () => { parseExcluded(); if (rows.length) renderRows(); });
+$("exclCol").addEventListener("change", () => rows.length && renderRows());
+$("exclClear").onclick = () => { $("exclDni").value = ""; parseExcluded(); if (rows.length) renderRows(); };
+
+// ===================== Filtros por columna =====================
+let filters = {};   // índice de columna -> Set de valores permitidos (sin entrada = sin filtro)
+let popOpen = null;
+const cellKey = v => textOf(v) || "(vacío)";
+const passes = i => Object.entries(filters).every(([ci, set]) => set.has(cellKey(rows[i].cells[ci])));
+
+function renderFilterBar(){
+  $("fltBar").innerHTML = cols.map((c,ci) => `<div class="flt"><button class="sec fbtn" data-flt="${ci}"></button></div>`).join("");
+  $("fltBar").querySelectorAll("[data-flt]").forEach(b => { b.onclick = e => { e.stopPropagation(); togglePop(+b.dataset.flt, b); }; });
+  updFilterButtons();
+}
+function updFilterButtons(){
+  $("fltBar").querySelectorAll("[data-flt]").forEach(b => {
+    const ci = +b.dataset.flt, f = filters[ci];
+    b.classList.toggle("on", !!f);
+    b.textContent = `${cols[ci]}${f ? ` (${f.size})` : ""} ▾`;
+  });
+  const n = Object.keys(filters).length;
+  $("fltInfo").innerHTML = n ? `<span class="st warn">${n} filtro(s) activo(s)</span>` : "";
+}
+function closePop(){ if (popOpen){ popOpen.remove(); popOpen = null; } }
+function togglePop(ci, btn){
+  const mismo = popOpen && popOpen.dataset.ci == ci;
+  closePop();
+  if (mismo) return;
+  const cuenta = new Map();
+  rows.forEach(r => { const k = cellKey(r.cells[ci]); cuenta.set(k, (cuenta.get(k)||0) + 1); });
+  const valores = [...cuenta.keys()].sort((a,b) => a.localeCompare(b, "es", {numeric:true}));
+  const actual = filters[ci];
+  const pop = document.createElement("div");
+  pop.className = "pop"; pop.dataset.ci = ci;
+  pop.innerHTML = `<input type="text" placeholder="Buscar en ${esc(cols[ci])}…">
+    <div class="acts"><button class="sec" data-a="all">Marcar todos</button><button class="sec" data-a="none">Desmarcar</button></div>
+    <div class="list">${valores.map(v => `<label><input type="checkbox" value="${esc(v)}" ${!actual || actual.has(v) ? "checked" : ""}> <span>${esc(v)}</span><span class="cnt">${cuenta.get(v)}</span></label>`).join("")}</div>`;
+  pop.addEventListener("click", e => e.stopPropagation());
+  btn.parentNode.appendChild(pop);
+  popOpen = pop;
+  const checks = [...pop.querySelectorAll(".list input")];
+  const aplicar = () => {
+    const marcados = checks.filter(c => c.checked).map(c => c.value);
+    if (marcados.length === valores.length) delete filters[ci]; else filters[ci] = new Set(marcados);
+    updFilterButtons(); renderRows();
+  };
+  const buscar = pop.querySelector("input[type=text]");
+  buscar.oninput = () => { const q = norm(buscar.value); checks.forEach(c => c.closest("label").classList.toggle("hidden", !norm(c.value).includes(q))); };
+  // marcar/desmarcar actúan solo sobre los valores visibles (búsqueda)
+  pop.querySelectorAll("[data-a]").forEach(b => b.onclick = () => {
+    checks.filter(c => !c.closest("label").classList.contains("hidden")).forEach(c => c.checked = b.dataset.a === "all");
+    aplicar();
+  });
+  checks.forEach(c => c.onchange = aplicar);
+  buscar.focus();
+}
+document.addEventListener("click", closePop);
+document.addEventListener("keydown", e => e.key === "Escape" && closePop());
+$("fltClear").onclick = () => { filters = {}; closePop(); updFilterButtons(); renderRows(); };
+
+// ===================== Vista previa / selección =====================
+const sendable = i => !built[i].errors.length && !isExcluded(i) && passes(i);
+function renderRows(){
+  if (!FORM) return;
+  updVarBox();
+  built = rows.map(buildPayload);
+  rows.forEach((_,i) => { if (isExcluded(i)) selected.delete(i); });
+  const visibles = FORM.fields.filter(f => mapping[f.entry].send && mapping[f.entry].src === "col");
+  const fijas = FORM.fields.filter(f => mapping[f.entry].send && mapping[f.entry].src === "fixed" && f.type !== "file");
+  $("prevHead").innerHTML = `<tr><th><input type="checkbox" id="chkAll"></th><th>Fila</th><th>Estado</th>${visibles.map(f=>`<th title="${esc(f.label)}">${esc(f.label.length>28?f.label.slice(0,28)+"…":f.label)}</th>`).join("")}<th>Observación</th></tr>`;
+  const vis = rows.map((_,i) => i).filter(passes);
+  $("prevBody").innerHTML = !vis.length ? `<tr><td colspan="${visibles.length+4}" class="empty">Ninguna fila cumple los filtros.</td></tr>` : vis.map(i => {
+    const r = rows[i], b = built[i], off = isExcluded(i);
+    const st = off ? '<span class="st off">Excluido</span>'
+      : r.status || (b.errors.length ? '<span class="st err">Con error</span>' : '<span class="st ok">Lista</span>');
+    return `<tr class="${off?"off":""}"><td><input type="checkbox" data-row="${i}" ${selected.has(i)?"checked":""} ${off?"disabled":""}></td><td class="muted">${r.n}</td><td id="st${i}">${st}</td>
+      ${visibles.map(f => `<td>${esc(b.shown[f.entry] ?? "")}</td>`).join("")}<td class="err">${off ? "DNI en lista de exclusión" : esc(b.errors.join(" · "))}</td></tr>`;
+  }).join("");
+  $("prevBody").querySelectorAll("[data-row]").forEach(el => el.onchange = () => {el.checked ? selected.add(+el.dataset.row) : selected.delete(+el.dataset.row); updCount();});
+  $("chkAll").onchange = e => {
+    vis.forEach(i => { if (e.target.checked && !isExcluded(i)) selected.add(i); else selected.delete(i); });
+    renderRows();
+  };
+  $("chkAll").checked = vis.length > 0 && vis.every(i => selected.has(i) || isExcluded(i));
+  $("fixedNote").textContent = fijas.length ? `Además, cada fila llevará ${fijas.length} respuesta(s) fija(s) del grupo B.` : "";
+  const nEx = rows.filter((_,i) => isExcluded(i)).length;
+  $("exclInfo").textContent = excluded.size ? `${excluded.size} DNI en la lista · ${nEx} fila(s) excluida(s)` + (exclColIdx() < 0 ? " · elige la columna del DNI" : "") : "Sin DNIs excluidos.";
+  updCount();
+}
+function updCount(){
+  const vis = rows.filter((_,i) => passes(i)).length;
+  const sel = [...selected].filter(passes);
+  const bad = sel.filter(i => built[i]?.errors.length).length;
+  const nEx = rows.filter((_,i) => passes(i) && isExcluded(i)).length;
+  const enviar = sel.filter(sendable).length;
+  $("rowCount").innerHTML = (vis < rows.length ? `Mostrando ${vis} de ${rows.length} filas · ` : "")
+    + `${sel.length} seleccionadas` + (bad ? ` · ${bad} con error` : "") + (nEx ? ` · ${nEx} excluidas por DNI` : "")
+    + ` · <b>se enviarán ${enviar}</b>`;
+  $("btnSend").disabled = !enviar;
+  $("btnSend").textContent = enviar ? `Enviar ${enviar} fila${enviar>1?"s":""}` : "Enviar filas seleccionadas";
+}
+// los botones de selección actúan solo sobre las filas visibles (filtradas)
+const visibles = () => rows.map((_,i) => i).filter(passes);
+$("selAll").onclick = () => {visibles().filter(i => !isExcluded(i)).forEach(i => selected.add(i)); renderRows();};
+$("selNone").onclick = () => {visibles().forEach(i => selected.delete(i)); renderRows();};
+$("selValid").onclick = () => {visibles().forEach(i => sendable(i) ? selected.add(i) : selected.delete(i)); renderRows();};
+
+// ===================== 5. Envío =====================
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function log(t){ const l = $("log"); l.classList.remove("hidden"); l.textContent += t + "\n"; l.scrollTop = l.scrollHeight; }
+
+async function enviarUna(pairs){
+  try {
+    const res = await fetch("/api/submit", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({action:FORM.action, pairs})});
+    return await res.json();
+  } catch {
+    // sin servidor: envío directo (Google no confirma)
+    await fetch(FORM.action, {method:"POST", mode:"no-cors", body:new URLSearchParams(pairs.map(([k,v]) => [k, String(v)]))});
+    return {ok:true, status:"?"};
+  }
+}
+
+$("btnSend").onclick = async () => {
+  const todo = [...selected].sort((a,b)=>a-b).filter(sendable);
+  if (!todo.length) return;
+  if (!confirm(`Se enviarán ${todo.length} respuestas a “${FORM.title}”. ¿Continuar?`)) return;
+  stopFlag = false; $("btnSend").disabled = true; $("btnStop").classList.remove("hidden");
+  const pausa = Math.max(0.5, +$("pausa").value || 2) * 1000;
+  const etiqueta = b => {
+    const f = FORM.fields.filter(x => mapping[x.entry].src === "col").slice(0,2);
+    return f.map(x => b.shown[x.entry]).filter(Boolean).join(" ");
+  };
+  let ok = 0, fail = 0;
+  for (let k = 0; k < todo.length; k++){
+    if (stopFlag){ log("⏹ Detenido por el usuario."); break; }
+    const i = todo[k], r = rows[i], b = built[i];
+    try {
+      const res = await enviarUna(b.pairs);
+      if (res.ok){ r.status = '<span class="st ok">Registrado</span>'; ok++; log(`✔ Fila ${r.n}: ${etiqueta(b)}`); }
+      else { r.status = `<span class="st err">Rechazado (${res.status})</span>`; fail++; log(`✖ Fila ${r.n}: Google rechazó la respuesta (${res.status}${res.error?" "+res.error:""}). Revisa campos obligatorios.`); }
+    } catch(e){
+      r.status = '<span class="st err">Falló</span>'; fail++;
+      log(`✖ Fila ${r.n}: ${e.message}`);
+    }
+    if ($("st"+i)) $("st"+i).innerHTML = r.status;
+    $("prog").style.width = ((k+1)/todo.length*100) + "%";
+    $("progTxt").textContent = `${k+1}/${todo.length}`;
+    if (k < todo.length-1) await sleep(pausa);
+  }
+  log(`Listo: ${ok} registradas, ${fail} con problema.`);
+  $("btnStop").classList.add("hidden"); updCount();
+};
+$("btnStop").onclick = () => stopFlag = true;
+
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+// arranque: identifica el último formulario usado
+if (location.protocol !== "file:") identificar();
+else $("formInfo").innerHTML = '<span class="st warn">Aviso</span> Abre la app con <b>iniciar_app.bat</b> (http://localhost:2001) o desde su dirección en Vercel para poder leer formularios.';
+</script>
+</body>
+</html>
