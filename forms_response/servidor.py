@@ -14,7 +14,7 @@ RAIZ = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(RAIZ, "api"))
 from _forms import api_form, api_submit, responder_json  # noqa: E402
 
-PUERTO = 2001
+PUERTO = int(os.environ.get("PUERTO", 2001))
 CARPETA = os.path.join(RAIZ, "public")
 
 

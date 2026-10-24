@@ -180,7 +180,8 @@ td.c-orig{width:230px}
   <div class="card hidden" id="cardSend">
     <h2><span class="n">5</span> Enviar</h2>
     <div class="row">
-      <label>Pausa entre envíos <input type="number" id="pausa" value="2" min="0.5" step="0.5" style="width:70px"> s</label>
+      <label title="Entre cada respuesta se espera un tiempo al azar dentro de este rango">Pausa entre envíos: de <input type="number" id="pausaMin" value="2" min="0.5" step="0.5" style="width:70px">
+        a <input type="number" id="pausaMax" value="5" min="0.5" step="0.5" style="width:70px"> s (al azar)</label>
       <button id="btnSend">Enviar filas seleccionadas</button>
       <button class="sec hidden" id="btnStop">Detener</button>
       <div class="bar"><div id="prog"></div></div>
@@ -778,7 +779,10 @@ $("btnSend").onclick = async () => {
   if (!todo.length) return;
   if (!confirm(`Se enviarán ${todo.length} respuestas a “${FORM.title}”. ¿Continuar?`)) return;
   stopFlag = false; $("btnSend").disabled = true; $("btnStop").classList.remove("hidden");
-  const pausa = Math.max(0.5, +$("pausa").value || 2) * 1000;
+  // pausa aleatoria entre envíos, dentro del rango elegido (si se invierten, se ordenan)
+  const [pMin, pMax] = [Math.max(0.5, +$("pausaMin").value || 2), Math.max(0.5, +$("pausaMax").value || 2)].sort((a,b) => a-b);
+  store.set("pausaRango", JSON.stringify([pMin, pMax]));
+  const pausa = () => (pMin + Math.random() * (pMax - pMin)) * 1000;
   const etiqueta = b => {
     const f = FORM.fields.filter(x => mapping[x.entry].src === "col").slice(0,2);
     return f.map(x => b.shown[x.entry]).filter(Boolean).join(" ");
@@ -798,12 +802,17 @@ $("btnSend").onclick = async () => {
     if ($("st"+i)) $("st"+i).innerHTML = r.status;
     $("prog").style.width = ((k+1)/todo.length*100) + "%";
     $("progTxt").textContent = `${k+1}/${todo.length}`;
-    if (k < todo.length-1) await sleep(pausa);
+    if (k < todo.length-1){
+      const ms = pausa();
+      $("progTxt").textContent = `${k+1}/${todo.length} · siguiente en ${(ms/1000).toFixed(1)} s`;
+      await sleep(ms);
+    }
   }
   log(`Listo: ${ok} registradas, ${fail} con problema.`);
   $("btnStop").classList.add("hidden"); updCount();
 };
 $("btnStop").onclick = () => stopFlag = true;
+try { const [a, b] = JSON.parse(store.get("pausaRango")); if (a && b){ $("pausaMin").value = a; $("pausaMax").value = b; } } catch {}
 
 function esc(s){ return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
