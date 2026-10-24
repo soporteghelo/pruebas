@@ -161,8 +161,8 @@ td.c-orig{width:230px}
       <div class="row" id="fltBar"></div>
     </div>
     <div class="fbox hidden" id="varBox">
-      <div class="row"><label><input type="checkbox" id="varNom"> <b>Variar formato de nombres</b></label>
-        <span class="muted small">— cada fila manda el nombre con distinto orden (apellidos/nombres primero) y distintas mayúsculas/minúsculas</span>
+      <div class="row"><label><input type="checkbox" id="varNom"> <b>Variar formato de nombres, cargo y empresa</b></label>
+        <span class="muted small">— cada fila manda el nombre con distinto orden (apellidos/nombres primero) y distintas mayúsculas/minúsculas; empresa, solo mayúsculas/minúsculas; cargo, además, a veces recortado ("Ayudante de operador")</span>
         <button class="sec fbtn" id="varMix" style="margin-left:auto">Mezclar de nuevo</button></div>
       <div class="row muted small" id="varInfo"></div>
     </div>
@@ -514,9 +514,12 @@ function textOf(raw){
 }
 
 // ===================== Variación de nombres =====================
-// campos de nombre completo: se puede variar orden y mayúsculas; los de solo nombre/apellido, solo mayúsculas
+// campos de nombre completo: se puede variar orden y mayúsculas; los de solo nombre/apellido o empresa, solo mayúsculas;
+// los de cargo, mayúsculas y a veces se recorta el final ("AYUDANTE DE OPERADOR DE EQUIPOS" -> "AYUDANTE DE OPERADOR")
 const NOMBRE_COMPLETO = ["APELLIDOS Y NOMBRES","NOMBRES Y APELLIDOS","NOMBRE COMPLETO","TRABAJADOR","COLABORADOR","PARTICIPANTE"];
-const NOMBRE_PARCIAL = ["NOMBRES","NOMBRE","APELLIDOS"];
+const NOMBRE_PARCIAL = ["NOMBRES","NOMBRE","APELLIDOS","EMPRESA","EMPRESA CONTRATISTA","CONTRATISTA","RAZON SOCIAL"];
+const CARGO = ["CARGO","PUESTO","PUESTO DE TRABAJO","OCUPACION"];
+const CORTES_CARGO = new Set(["DE","DEL","Y","E","EN","PARA"]);
 const PARTICULAS = new Set(["DE","DEL","LA","LAS","LOS","Y","SAN","SANTA","VAN","VON","DA","DI"]);
 let varSeed = +(store.get("varSeed") || 1);
 function tipoNombre(f, m){
@@ -524,7 +527,17 @@ function tipoNombre(f, m){
   const nombres = [clean(f.label), m.src === "col" && m.col >= 0 ? clean(cols[m.col]) : ""];
   if (nombres.some(n => NOMBRE_COMPLETO.includes(n))) return "completo";
   if (nombres.some(n => NOMBRE_PARCIAL.includes(n))) return "parcial";
+  if (nombres.some(n => CARGO.includes(n))) return "cargo";
   return null;
+}
+// recortes posibles: antes de cada "DE/Y/EN..." dejando al menos 2 palabras con contenido; la mitad de las filas va completa
+function recortarCargo(palabras, h){
+  const cortes = [];
+  palabras.forEach((p, i) => {
+    if (i && CORTES_CARGO.has(norm(p)) && palabras.slice(0, i).filter(w => !PARTICULAS.has(norm(w))).length >= 2) cortes.push(i);
+  });
+  if (!cortes.length || h % 2) return palabras;
+  return palabras.slice(0, cortes[(h >>> 8) % cortes.length]);
 }
 function hashFila(n){
   let h = (Math.imul(n, 0x9E3779B1) ^ Math.imul(varSeed, 0x85EBCA77)) >>> 0;
@@ -555,6 +568,7 @@ function variarNombre(txt, tipo, n){
   if (!palabras.length) return txt;
   const h = hashFila(n);
   let partes = [palabras.join(" ")];
+  if (tipo === "cargo") partes = [recortarCargo(palabras, hashFila(n + 7919)).join(" ")];
   if (tipo === "completo"){
     const u = unidades(palabras);
     // formato del Excel: APELLIDO1 APELLIDO2 NOMBRES (si hay 2 unidades: APELLIDO NOMBRE)
